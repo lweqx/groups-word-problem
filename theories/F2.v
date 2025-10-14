@@ -10,28 +10,14 @@ Import ListNotations.
 
 Inductive F2_sigma : Type := a | a_inv | b | b_inv.
 
-Definition F2_presentation : Presentation := {|
-  Sigma := F2_sigma;
-  R := [
+HB.instance Definition _ := isPresentation.Build F2_sigma [
     ([a; a_inv], []);
     ([b; b_inv], []);
     ([a_inv; a], []);
     ([b_inv; b], [])
-  ];
-|}.
+  ].
 
-Notation F2 := (presented F2_presentation).
-
-Module F2Notations.
-Definition present_f2_word : list F2_sigma -> F2 := id.
-
-Notation "`[ ]" := (present_f2_word []) (format "`[ ]") : list_scope.
-Notation "`[ x ]" := (present_f2_word [x]) : list_scope.
-Notation "`[ x ; y ; .. ; z ]" := (present_f2_word (x :: (cons y .. [z] ..)))
-  (format "`[ '[' x ; '/' y ; '/' .. ; '/' z ']' ]") : list_scope.
-End F2Notations.
-
-Import F2Notations.
+Notation F2 := (presented F2_sigma).
 
 Module F2Group.
 Section F2Group.
@@ -50,8 +36,8 @@ transitivity (`[] @ `[c; inv_letter c]).
   exact: neutral_left.
 transitivity (`[] @ `[c; inv_letter c] @ `[]).
   symmetry; exact: neutral_right.
-transitivity (`[] @ `[] @ `[]); last first.
-  transitivity (`[] @ `[]); [symmetry | ]; exact: neutral_right.
+transitivity (`[] @ `[] @ `[] : F2); last first.
+  transitivity (`[] @ `[] : F2); [symmetry | ]; exact: neutral_right.
 apply: reduction.
 by case: c; repeat ((try by left); right).
 Qed.
@@ -63,8 +49,8 @@ transitivity (`[] @ `[inv_letter c; c]).
   exact: neutral_left.
 transitivity (`[] @ `[inv_letter c; c] @ `[]).
   symmetry; exact: neutral_right.
-transitivity (`[] @ `[] @ `[]); last first.
-  transitivity (`[] @ `[]); [symmetry | ]; exact: neutral_right.
+transitivity (`[] @ `[] @ `[] : F2); last first.
+  transitivity (`[] @ `[] : F2); [symmetry | ]; exact: neutral_right.
 apply: reduction.
 by case: c; repeat ((try by left); right).
 Qed.
