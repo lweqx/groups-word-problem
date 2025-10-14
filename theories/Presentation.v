@@ -39,14 +39,13 @@ Let finalWord (r: relation) : word := snd r.
 
 (* `Derivation u v` is the type of witnesses of derivations from
   `u: word` to `v: word` in `P: Presentation` *)
-Inductive Derivation (u: word) : word -> Prop :=
+Inductive Derivation : word -> word -> Prop :=
   | Derivation_reduction (r: relation) (a c: word) :
       isRelationOf r ->
-      u = a @ (initialWord r) @ c ->
-      Derivation u (a @ (finalWord r) @ c)
-  | Derivation_refl : Derivation u u
-  | Derivation_symm (u': word) : Derivation u' u -> Derivation u u'
-  | Derivation_trans (v w: word) :
+      Derivation (a @ (initialWord r) @ c) (a @ (finalWord r) @ c)
+  | Derivation_refl (u: word): Derivation u u
+  | Derivation_symm (u u': word) : Derivation u u' -> Derivation u' u
+  | Derivation_trans (u v w: word) :
       Derivation u v -> Derivation v w -> Derivation u w.
 
 (* The word problem of the presentation `P`. *)
@@ -70,7 +69,7 @@ Let eq := word_problem P.
 Lemma M_refl : forall x, eq x x.
 Proof. exact: Derivation_refl. Qed.
 Lemma M_symm : forall x y, eq x y -> eq y x.
-Proof. move=> x y; exact: Derivation_symm. Qed.
+Proof. exact: Derivation_symm. Qed.
 Lemma M_trans : forall x y z, eq x y -> eq y z -> eq x z.
 Proof. exact: Derivation_trans. Qed.
 
@@ -102,7 +101,7 @@ End PresentedMonoid.
 Lemma reduction {P: Presentation}:
   forall (a b u v: presented P),
   In (u, v) (R P) -> a @ u @ b == a @ v @ b.
-Proof. by move=> a b u v H; apply: (Derivation_reduction _ _ (u, v)); done. Qed.
+Proof. by move=> a b u v H; apply: (Derivation_reduction _ (u, v)); done. Qed.
 
 Lemma repeated_reduction_left {P: Presentation}:
   forall (a u v: presented P),
@@ -110,8 +109,7 @@ Lemma repeated_reduction_left {P: Presentation}:
 Proof.
 move=> a u v eq.
 induction eq.
-- subst.
-  rewrite /law/= -!(app_assoc a0) !(app_assoc a) !(app_assoc (a ++ a0)).
+- rewrite /law/= -!(app_assoc a0) !(app_assoc a) !(app_assoc (a ++ a0)).
   apply: reduction.
   by move: H; case r.
 - reflexivity.
@@ -125,8 +123,7 @@ Lemma repeated_reduction_right {P: Presentation}:
 Proof.
 move=> b u v eq.
 induction eq.
-- subst.
-  rewrite /law/= -!(app_assoc a) -!(app_assoc _ _ b) !(app_assoc a).
+- rewrite /law/= -!(app_assoc a) -!(app_assoc _ _ b) !(app_assoc a).
   apply: reduction.
   by move: H; case r.
 - reflexivity.
