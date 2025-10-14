@@ -9,6 +9,7 @@ HB.mixin Record isMonoid M of hasEq M := {
   neutral_left : forall x, law e x == x;
   neutral_right : forall x, law x e == x;
 }.
+#[short(type="monoid")]
 HB.structure Definition Monoid := { G of isMonoid G & hasEq G }.
 Infix "@" := law (at level 50).
 
@@ -18,5 +19,6 @@ HB.mixin Record isGroup G of hasEq G & isMonoid G := {
   inverse_left : forall x, x @ (inv x) == e;
   inverse_right : forall x, (inv x) @ x == e;
 }.
+#[short(type="group")]
 HB.structure Definition Group := { G of isGroup G & hasEq G & isMonoid G }.
 Notation "x '^'" := (inv x) (at level 50).
