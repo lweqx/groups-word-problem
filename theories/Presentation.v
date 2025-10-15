@@ -153,12 +153,14 @@ apply: repeated_reduction_right.
 by apply: repeated_reduction_left.
 Qed.
 
-Import ListNotations.
+Module PresentationNotations.
+Notation "`[ ]" := ([::]) (format "`[ ]").
+Notation "'`[' x ']'" := ([:: x]).
+Notation "`[ x ; y ; .. ; z ]" := ((x :: (cons y .. [:: z] ..)))
+  (format "`[ '[' x ; '/' y ; '/' .. ; '/' z ']' ]").
+End PresentationNotations.
 
-Notation "`[ ]" := ([]) (format "`[ ]") : list_scope.
-Notation "`[ x ]" := ([x]) : list_scope.
-Notation "`[ x ; y ; .. ; z ]" := ((x :: (cons y .. [z] ..)))
-  (format "`[ '[' x ; '/' y ; '/' .. ; '/' z ']' ]") : list_scope.
+Import PresentationNotations.
 
 HB.mixin Record hasInvertibleLetters (P: presentationType) := {
   invl : (sigma P) -> (sigma P);
