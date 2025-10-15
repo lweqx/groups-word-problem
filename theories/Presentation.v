@@ -104,6 +104,18 @@ Lemma reduction {P: presentationType}:
   (u, v) \in relations -> a @ u @ b == a @ v @ b.
 Proof. by move=> a b u v H; apply: (Derivation_reduction _ (u, v)); done. Qed.
 
+Lemma reduction_rule {P: presentationType}:
+  forall (u v: presented P),
+  (u, v) \in relations -> u == v.
+Proof.
+move=> u v Hin.
+transitivity (nil @ u @ nil).
+  by symmetry; apply: neutral_right.
+transitivity (nil @ v @ nil); last first.
+  by apply: neutral_right.
+exact: (reduction nil nil).
+Qed.
+
 Lemma repeated_reduction_left {P: presentationType}:
   forall (a u v: presented P),
   u == v -> a @ u == a @ v.
