@@ -1,21 +1,22 @@
 From HB Require Import structures.
-Require Import ssreflect RelationClasses.
-From Stdlib Require Import List.
+Require Import RelationClasses.
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import seq eqtype.
 
 From GWP Require Import Equality Algebra.
 
 (* a rewriting rule u -> v *)
-Definition relation (Sigma: Type) := ((list Sigma) * (list Sigma)) % type.
+Definition relation (Sigma: Type) := ((seq Sigma) * (seq Sigma)) % type.
 
 HB.mixin Record isPresentation (Sigma: Type) := {
   (* TODO: it would be cool to do as follow instead of the `sigma` hack below.
      But HB doesn't implement it. *)
   (* sigma := Sigma; *)
-  relations: list (relation Sigma);
+  relations: seq (relation Sigma);
 }.
 
 #[short(type="presentationType")]
-HB.structure Definition Presentation := { Sigma & isPresentation Sigma }.
+HB.structure Definition Presentation := { Sigma of hasDecEq Sigma & isPresentation Sigma }.
 
 (* The alphabet of a `P: presentationType` is `P` itself.
    Quantifying over `P` is conceptually a bit weird because it doesn't match the mathematical intuition.
@@ -23,15 +24,15 @@ HB.structure Definition Presentation := { Sigma & isPresentation Sigma }.
 Definition sigma (P: presentationType) : Type := P.
 
 Section WordProblem.
-Local Infix "@" := List.app (at level 50).
+Local Infix "@" := cat (at level 50).
 
 Variable P: presentationType.
 
-Let word := (list (sigma P)).
+Let word := (seq (sigma P)).
 Let relation := (relation (sigma P)).
 
 (* Whether a rewriting relation `r` is a part of the presentation. *)
-Let isRelationOf (r: relation) := In r relations.
+Let isRelationOf (r: relation) := r \in relations.
 
 Let initialWord (r: relation) : word := fst r.
 Let finalWord (r: relation) : word := snd r.
@@ -83,52 +84,52 @@ Variable P: presentationType.
 
 Local Notation M := (presented P).
 
-Let concat := @List.app P.
-Let epsilon : list P := nil.
+Let concat := @cat P.
+Let epsilon : seq P := nil.
 
 Infix ".@" := (concat: M -> M -> M) (at level 50).
 
 Let associativity : forall (x y z : M), x .@ (y .@ z) == (x .@ y) .@ z.
-Proof. by move=> x y z; rewrite /concat app_assoc; reflexivity. Qed.
+Proof. move=> x y w; rewrite /concat catA; reflexivity. Qed.
 Let neutral_left : forall (x: M), epsilon .@ x == x.
 Proof. move=> x; rewrite /concat /=; reflexivity. Qed.
 Let neutral_right : forall (x: M), x .@ epsilon == x.
-Proof. move=> x; rewrite /concat app_nil_r; reflexivity. Qed.
+Proof. move=> x; rewrite /concat cats0; reflexivity. Qed.
 
 HB.instance Definition _ := isMonoid.Build M concat epsilon associativity neutral_left neutral_right.
 End PresentedMonoid.
 
 Lemma reduction {P: presentationType}:
   forall (a b u v: presented P),
-  In (u, v) relations -> a @ u @ b == a @ v @ b.
+  (u, v) \in relations -> a @ u @ b == a @ v @ b.
 Proof. by move=> a b u v H; apply: (Derivation_reduction _ (u, v)); done. Qed.
 
 Lemma repeated_reduction_left {P: presentationType}:
   forall (a u v: presented P),
   u == v -> a @ u == a @ v.
 Proof.
-move=> a u v eq.
-induction eq.
-- rewrite /law/= -!(app_assoc a0) !(app_assoc a) !(app_assoc (a ++ a0)).
+move=> a u v; elim.
+- move=> r c b H.
+  rewrite /law/= -!(catA c) !(catA a) !(catA (a ++ c)).
   apply: reduction.
   by move: H; case r.
 - reflexivity.
 - by symmetry.
-- by transitivity (a @ v).
+- by move=> ? v'; transitivity (a @ v').
 Qed.
 
 Lemma repeated_reduction_right {P: presentationType}:
   forall (b u v: presented P),
   u == v -> u @ b == v @ b.
 Proof.
-move=> b u v eq.
-induction eq.
-- rewrite /law/= -!(app_assoc a) -!(app_assoc _ _ b) !(app_assoc a).
+move=> b u v; elim.
+- move=> r a c H.
+  rewrite /law/= -!(catA a) -!(catA _ _ b) !(catA a).
   apply: reduction.
   by move: H; case r.
 - reflexivity.
 - by symmetry.
-- by transitivity (v @ b).
+- by move=> ? a; transitivity (a @ b).
 Qed.
 
 Lemma repeated_reduction {P: presentationType}:
@@ -160,39 +161,33 @@ Section InvertiblePresentedGroup.
 Variable P: invertiblePresentationType.
 Notation G := (presented P).
 
-Definition inv (w: G) : G := List.map invl (List.rev w).
+Definition inv (w: G) : G := map invl (rev w).
 
 Lemma inverse_left : forall w: G, w @ (inv w) == e.
 Proof.
 move=> w; induction w.
   exact: neutral_left.
-transitivity (`[a] @ (w @ (inv w)) @ `[invl a]).
-  rewrite /inv/= map_app.
-  rewrite /law/= app_assoc.
-  reflexivity.
-transitivity (`[a] @ e @ `[invl a]).
-  by apply: repeated_reduction.
-transitivity (`[a] @ `[invl a]).
-  apply: repeated_reduction_right.
-  by apply: neutral_left.
-by apply: invl_left.
+rewrite /inv/law/= rev_cons map_rcons -rcons_cat -cats1 -cat1s.
+have: `[a] @ (w @ inv w) @ `[invl a] == e; last by done.
+transitivity (`[a] @ e @ `[invl a]); first by apply: repeated_reduction.
+transitivity (`[a] @ `[invl a]); last first.
+  by apply: invl_left.
+apply: repeated_reduction_right.
+by apply: neutral_left.
 Qed.
 
 Lemma inverse_right : forall w: G, (inv w) @ w == e.
 Proof.
 move=> w; induction w.
   exact: neutral_left.
-transitivity ((inv w) @ (`[invl a] @ `[a]) @ w).
-  rewrite /inv/= map_app.
-  rewrite /law/= -!app_assoc.
-  reflexivity.
+rewrite /inv/law/= rev_cons map_rcons cat_rcons -cat1s -(cat1s a) !(catA _ _ w).
+have: (inv w) @ (`[invl a] @ `[a]) @ w == e; last by done.
 transitivity ((inv w) @ e @ w).
   apply: repeated_reduction.
   exact: invl_right.
-transitivity (inv w @ w).
-  apply: repeated_reduction_right.
-  by apply: neutral_right.
-done.
+transitivity (inv w @ w); last done.
+apply: repeated_reduction_right.
+by apply: neutral_right.
 Qed.
 
 HB.instance Definition _ := isGroup.Build G inv inverse_left inverse_right.
