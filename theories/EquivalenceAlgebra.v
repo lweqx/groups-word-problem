@@ -1,6 +1,9 @@
 From HB Require Import structures.
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import seq.
+From Stdlib Require Import List.
 
-From GWP Require Import Equality.
+From GWP Require Import Equivalence.
 
 HB.mixin Record isMonoid M of hasEq M := {
   law : M -> M -> M;
@@ -21,4 +24,3 @@ HB.mixin Record isGroup G of hasEq G & isMonoid G := {
 }.
 #[short(type="group")]
 HB.structure Definition Group := { G of isGroup G & hasEq G & isMonoid G }.
-Notation "x '^'" := (inv x) (at level 50).

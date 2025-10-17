@@ -3,7 +3,7 @@ Require Import RelationClasses.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import seq eqtype.
 
-From GWP Require Import Equality Algebra.
+From GWP Require Import Equivalence EquivalenceAlgebra.
 
 (* a rewriting rule u -> v *)
 Definition relation (Sigma: Type) := ((seq Sigma) * (seq Sigma)) % type.

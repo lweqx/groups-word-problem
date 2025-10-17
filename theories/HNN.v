@@ -2,7 +2,7 @@ From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import seq eqtype.
 
-From GWP Require Import Presentation Algebra Equality.
+From GWP Require Import Presentation EquivalenceAlgebra Equivalence.
 
 Import PresentationNotations.
 
