@@ -175,14 +175,14 @@ Section InvertiblePresentedGroup.
 Variable P: invertiblePresentationType.
 Notation G := (presented P).
 
-Definition inv (w: G) : G := map invl (rev w).
+Definition inv_word (w: G) : G := map invl (rev w).
 
-Lemma inverse_left : forall w: G, w @ (inv w) == e.
+Lemma inv_word_left : forall w: G, w @ (inv_word w) == e.
 Proof.
 move=> w; induction w.
   exact: neutral_left.
-rewrite /inv/law/= rev_cons map_rcons -rcons_cat -cats1 -cat1s.
-have: `[a] @ (w @ inv w) @ `[invl a] == e; last by done.
+rewrite /inv_word/law/= rev_cons map_rcons -rcons_cat -cats1 -cat1s.
+have: `[a] @ (w @ inv_word w) @ `[invl a] == e; last by done.
 transitivity (`[a] @ e @ `[invl a]); first by apply: repeated_reduction.
 transitivity (`[a] @ `[invl a]); last first.
   by apply: invl_left.
@@ -190,20 +190,65 @@ apply: repeated_reduction_right.
 by apply: neutral_left.
 Qed.
 
-Lemma inverse_right : forall w: G, (inv w) @ w == e.
+Lemma inv_word_right : forall w: G, (inv_word w) @ w == e.
 Proof.
 move=> w; induction w.
   exact: neutral_left.
-rewrite /inv/law/= rev_cons map_rcons cat_rcons -cat1s -(cat1s a) !(catA _ _ w).
-have: (inv w) @ (`[invl a] @ `[a]) @ w == e; last by done.
-transitivity ((inv w) @ e @ w).
+rewrite /inv_word/law/= rev_cons map_rcons cat_rcons -cat1s -(cat1s a) !(catA _ _ w).
+have: (inv_word w) @ (`[invl a] @ `[a]) @ w == e; last by done.
+transitivity ((inv_word w) @ e @ w).
   apply: repeated_reduction.
   exact: invl_right.
-transitivity (inv w @ w); last done.
+transitivity (inv_word w @ w); last done.
 apply: repeated_reduction_right.
 by apply: neutral_right.
 Qed.
 
-HB.instance Definition _ := isGroup.Build G inv inverse_left inverse_right.
+HB.instance Definition _ := isGroup.Build G inv_word inv_word_left inv_word_right.
 
 End InvertiblePresentedGroup.
+
+Section Cancelation.
+
+Variable P: invertiblePresentationType.
+Notation G := (presented P).
+
+Variable a x y : G.
+
+Lemma cancel_left : a @ x == a @ y -> x == y.
+Proof.
+move=> ?.
+have : (inv a) @ a @ x == (inv a) @ a @ y.
+  transitivity ((inv a) @ (a @ x)); first by symmetry; exact: associativity.
+  transitivity ((inv a) @ (a @ y)); last by exact: associativity.
+  exact: repeated_reduction_left.
+move=> H.
+transitivity (e @ x); first exact: neutral_left.
+transitivity (e @ y); last exact: neutral_left.
+transitivity ((inv a @ a) @ x).
+  apply: repeated_reduction_right.
+  by symmetry; exact: inverse_right.
+transitivity ((inv a @ a) @ y); first done.
+apply: repeated_reduction_right.
+exact: inverse_right.
+Qed.
+
+Lemma cancel_right : x @ a == y @ a -> x == y.
+Proof.
+move=> ?.
+have : x @ (a @ (inv a)) == y @ (a @ (inv a)).
+  transitivity ((x @ a) @ (inv a)); first by exact: associativity.
+  transitivity ((y @ a) @ (inv a)); last by symmetry; exact: associativity.
+  exact: repeated_reduction_right.
+move=> H.
+transitivity (x @ e); first by symmetry; exact: neutral_right.
+transitivity (y @ e); last exact: neutral_right.
+transitivity (x @ (a @ (inv a))).
+  apply: repeated_reduction_left.
+  by symmetry; exact: inverse_left.
+transitivity (y @ (a @ (inv a))); first done.
+apply: repeated_reduction_left.
+exact: inverse_left.
+Qed.
+
+End Cancelation.
