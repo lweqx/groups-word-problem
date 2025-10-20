@@ -252,3 +252,5 @@ exact: inverse_left.
 Qed.
 
 End Cancelation.
+Arguments cancel_left {_}.
+Arguments cancel_right {_}.
