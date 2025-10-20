@@ -1,5 +1,5 @@
 From HB Require Import structures.
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat ssrint.
 From mathcomp Require Import seq eqtype.
 
 From GWP Require Import Equivalence.
@@ -23,6 +23,12 @@ HB.mixin Record isGroup G of hasEq G & isMonoid G & hasDecEq G := {
 }.
 #[short(type="group")]
 HB.structure Definition Group := { G of isGroup G & hasEq G & isMonoid G & hasDecEq G }.
+
+Definition power {G: group} (w: G) (k: int) : G :=
+  match k with
+  | Posz k => iter k (fun acc => acc @ w) e
+  | Negz k => inv (iter k (fun acc => acc @ w) w) (* Negx 0 is -1 *)
+  end.
 
 (* If `l = [a; b; c; ...; z]`, `prod l = a @ b @ ... @ z` *)
 Definition prod {G: group} (l: list G) : G := foldl (fun y acc => acc @ y) e l.
