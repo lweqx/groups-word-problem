@@ -69,5 +69,7 @@ End Affine.
 (* The equivalence problem. *)
 Definition equivalence_problem (A: Machine) (m z: int) : Prop := Equivalent A m z.
 
-Theorem equivalence_problem_undecidable : undecidable (fun '(A, m, z) => equivalence_problem A m z).
+Definition equivalence_problem_uncurried := fun '(A, m, z) => equivalence_problem A m z.
+
+Theorem equivalence_problem_undecidable : undecidable equivalence_problem_uncurried.
 Admitted.
