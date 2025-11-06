@@ -8,3 +8,4 @@ Makefile.conf
 *.vok
 *.vos
 *.glob
+*.cache

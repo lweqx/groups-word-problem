@@ -39,6 +39,7 @@
               rocqPackages.rocq-core
               rocqPackages.stdlib
               coqPackages.mathcomp
+              coqPackages.mathcomp-algebra-tactics
               (pkgs.callPackage ./coq-library-undecidability.nix { })
             ];
           };
