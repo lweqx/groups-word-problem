@@ -1,12 +1,13 @@
 From HB Require Import structures.
 From Undecidability.Synthetic Require Import Undecidability.
-From Undecidability.MinskyMachines Require Import MM2 MM2_undec.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import seq.
 From mathcomp Require Import all_algebra eqtype fintype ssrnat intdiv prime.
 From mathcomp Require Import ring lra zify.
 From Stdlib.Relations Require Import Relation_Operators Operators_Properties.
 From Stdlib.Program Require Import Equality.
+
+From GWP Require Import LM2.
 
 Import GRing.Theory.
 Open Scope int_scope.
@@ -63,99 +64,7 @@ End Affine.
 Definition equivalence_problem (A: Machine) (m z: int) : Prop := clos_refl_sym_trans _ (affineStep A) m z.
 Definition equivalence_problem_uncurried := fun '(A, m, z) => equivalence_problem A m z.
 
-Section LM2.
-(* Number of instructions in the machine. *)
-Variable n: nat.
-Hypothesis machine_non_empty: (n > 0)%N.
-
-(* Instruction addresses, 0 = "program end" *)
-Inductive lm2_addr : Type :=
-  | lm2_addr_stop : lm2_addr
-  | lm2_addr_instr : 'I_n -> lm2_addr.
-Definition lm2_addr_eq_op (a a': lm2_addr) : bool := match (a, a') with
-  | (lm2_addr_stop, lm2_addr_stop) => true
-  | (lm2_addr_instr pos, lm2_addr_instr pos') => pos == pos'
-  | _ => false
-  end.
-Lemma lm2_addr_eqP : Equality.axiom lm2_addr_eq_op.
-Proof.
-move=> s s'; apply /(iffP idP).
-- case: s; case: s' => //.
-  by move=> i i' /eqP ->.
-- move=> ->; case: s' => //.
-  move=> i.
-  by rewrite /lm2_addr_eq_op.
-Qed.
-HB.instance Definition _ := hasDecEq.Build lm2_addr lm2_addr_eqP.
-
-Inductive lm2_instr : Type :=
-  | lm2_inc_x : lm2_addr -> lm2_instr
-  | lm2_inc_y : lm2_addr -> lm2_instr
-  | lm2_dec_x : lm2_addr -> lm2_addr -> lm2_instr
-  | lm2_dec_y : lm2_addr -> lm2_addr -> lm2_instr.
-
-Record lm2_machine := {
-  instructions :> seq lm2_instr;
-  machine_length : size instructions = n;
-}.
-
-Variable M: lm2_machine.
-
-Definition lm2_state := (lm2_addr * (nat * nat))%type.
-Definition index (s: lm2_state) := s.1.
-Definition value_x (s: lm2_state) := s.2.1.
-Definition value_y (s: lm2_state) := s.2.2.
-
-Definition lm2_dummy_instr: lm2_instr.
-Proof. exact /lm2_inc_x /lm2_addr_stop. Qed.
-
-Definition lm2_instr_at (pos: 'I_n) := nth lm2_dummy_instr M pos.
-
-Definition lm2_step (s s': lm2_state) := if index s is lm2_addr_instr pos then (
-    match lm2_instr_at pos with
-    | lm2_inc_x i => (index s' = i) /\ (value_x s' = (value_x s).+1) /\ (value_y s' = value_y s)
-    | lm2_inc_y i => (index s' = i) /\ (value_x s' = value_x s) /\ (value_y s' = (value_y s).+1)
-    | lm2_dec_x i j => if value_x s is S n
-        then (index s' = j) /\ (value_x s' = n) /\ (value_y s' = value_y s)
-        else (index s' = i) /\ (value_x s' = 0) /\ (value_y s' = value_y s)
-    | lm2_dec_y i j => if value_y s is S n
-        then (index s' = j) /\ (value_x s' = value_x s) /\ (value_y s' = n)
-        else (index s' = i) /\ (value_x s' = value_x s) /\ (value_y s' = 0)
-    end
-  ) else False (* machine is stopped *).
-
-Definition lm2_initial_state (x y: nat) : lm2_state.
-Proof.
-apply: pair.
-  apply: lm2_addr_instr.
-  by exists 0.
-exact: (x, y).
-Qed.
-
-Definition lm2_ending_state: lm2_state := (lm2_addr_stop, (0, 0)).
-
-Definition LM2_HALTS (x y: nat) :=
-  clos_refl_trans _ lm2_step (lm2_initial_state x y) lm2_ending_state.
-
-End LM2.
-Arguments value_x _ _ /.
-Arguments value_y _ _ /.
-
-Record Lm2HaltsArguments := {
-  lm2_halts_arguments_n: nat;
-  lm2_halts_arguments_M: lm2_machine lm2_halts_arguments_n;
-  lm2_halts_arguments_ne0: (0 < lm2_halts_arguments_n)%N;
-  lm2_halts_arguments_x: nat;
-  lm2_halts_arguments_y: nat;
-}.
-Definition LM2_HALTS_uncurried (args: Lm2HaltsArguments) :=
-  LM2_HALTS (lm2_halts_arguments_ne0 args) (lm2_halts_arguments_M args) (lm2_halts_arguments_x args) (lm2_halts_arguments_y args).
-
-Lemma LM2_HALTS_undec : undecidable LM2_HALTS_uncurried.
-Admitted.
-
 Section Reduction.
-Import MM2Notations.
 
 Variable n: nat.
 Variable machine_non_empty: (n > 0)%N.
@@ -226,9 +135,13 @@ elim: i; rewrite /lm2_step //=.
 move=> pos.
 set instr := lm2_instr_at M pos.
 have: instr = lm2_instr_at M pos by done.
-elim: instr.
+elim: instr => [
+  j instr_at_pos /andP [[/andP [/eqP -> /eqP ->]] /eqP ->] |
+  j instr_at_pos /andP [[/andP [/eqP -> /eqP ->]] /eqP ->] |
+  j k instr_at_pos |
+  j k instr_at_pos
+].
 - (* inc_x *)
-  move=> j instr_at_pos; do ! case=> [->].
   exists (((address_encoding (lm2_addr_instr pos))%:Z, m), ((address_encoding j)%:Z, 2 * m)).
   split.
     apply /flattenP.
@@ -243,7 +156,6 @@ elim: instr.
   rewrite /= exprS.
   lia.
 - (* inc_y *)
-  move=> j instr_at_pos; do ! case=> [->].
   exists (((address_encoding (lm2_addr_instr pos))%:Z, m), ((address_encoding j)%:Z, 3 * m)).
   split.
     apply /flattenP.
@@ -258,10 +170,8 @@ elim: instr.
   rewrite /= exprS.
   lia.
 - (* dec_x *)
-  move=> j k instr_at_pos.
-  case: x.
-  - do ! case=> [->].
-    exists (((address_encoding (lm2_addr_instr pos))%:Z + m, 2 * m), ((address_encoding j)%:Z + m, 2 * m)).
+  case: x => [/andP [[/andP [/eqP -> /eqP ->]] /eqP ->]|l /andP [[/andP [/eqP -> /eqP ->]] /eqP ->]].
+  - exists (((address_encoding (lm2_addr_instr pos))%:Z + m, 2 * m), ((address_encoding j)%:Z + m, 2 * m)).
     split.
       apply /flattenP.
       exists (instruction_encoding (lm2_dec_x j k) pos); last first.
@@ -282,8 +192,7 @@ elim: instr.
     rewrite -{7}remainder_1.
     rewrite -(divz_eq (2^+0 * 3^+y) 2).
     lia.
-  - move=> l; do ! case=> [->].
-    exists (((address_encoding (lm2_addr_instr pos))%:Z, 2 * m), ((address_encoding k)%:Z, m)).
+  - exists (((address_encoding (lm2_addr_instr pos))%:Z, 2 * m), ((address_encoding k)%:Z, m)).
     split.
       apply /flattenP.
       exists (instruction_encoding (lm2_dec_x j k) pos); last first.
@@ -296,10 +205,8 @@ elim: instr.
       rewrite exprS; lia.
     rewrite /=; lia.
 - (* dec_y *)
-  move=> j k instr_at_pos.
-  case: y.
-  - do ! case=> [->].
-    have []: ((2 ^+ x * 3 ^+ 0) %% 3)%Z = 1 \/ ((2 ^+ x * 3 ^+ 0) %% 3)%Z = 2.
+  case: y => [/andP [[/andP [/eqP -> /eqP ->]] /eqP ->]|l /andP [[/andP [/eqP -> /eqP ->]] /eqP ->]].
+  - have []: ((2 ^+ x * 3 ^+ 0) %% 3)%Z = 1 \/ ((2 ^+ x * 3 ^+ 0) %% 3)%Z = 2.
       have: ((2 ^+ x * 3 ^+ 0) %% 3)%Z < 3 by apply: ltz_pmod.
       admit.
     - move=> remainder.
@@ -330,8 +237,7 @@ elim: instr.
         rewrite -mulrA {1}(divz_eq (2^+x * 3^+0) 3).
         rewrite remainder; lia.
       rewrite /=; lia.
-  - move=> l; do ! case=> [->].
-    exists (((address_encoding (lm2_addr_instr pos))%:Z, 3 * m), ((address_encoding k)%:Z, m)).
+  - exists (((address_encoding (lm2_addr_instr pos))%:Z, 3 * m), ((address_encoding k)%:Z, m)).
     split.
       apply /flattenP.
       exists (instruction_encoding (lm2_dec_y j k) pos); last first.
@@ -376,7 +282,7 @@ Arguments simplify_quotient a b {c d} K.
 
 Lemma address_encoding_bound : forall a, (address_encoding a <= (size M).+1 - 1)%N.
 Proof.
-rewrite machine_length.
+rewrite (eqP machine_length).
 case=> /=; first lia.
 move=> pos.
 have := ltn_ord pos; lia.
@@ -431,7 +337,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
   have: (2^+x * 3^+y) = k.
     apply /(simplify_quotient (address_encoding i) pos.+1 m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: s_eq.
   move: s'_eq => /[swap] <- s'_eq.
   have: (2 ^+ x' * 3 ^+ y') = (2 * (2 ^+ x * 3 ^+ y) : int).
@@ -445,14 +351,13 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     rewrite -eqz_nat.
     apply /eqP /(simplify_modulo _ _ m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: s_eq.
   move=> {s_eq} {s'_eq}; elim: i => [/=|pos' /= /eqP].
     lia.
   rewrite eqSS.
   move=> /eqP /ord_inj -> {pos'}.
-  rewrite /lm2_step/= -instr_at_pos.
-  done.
+  by rewrite /lm2_step/= -instr_at_pos !eq_refl.
 - rewrite inE.
   move=> /eqP [] -> -> -> ->.
   rewrite -mulrA.
@@ -468,7 +373,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
   have: (2^+x * 3^+y) = k.
     apply /(simplify_quotient (address_encoding i) pos.+1 m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: s_eq.
   move: s'_eq => /[swap] <- s'_eq.
   have: (2 ^+ x' * 3 ^+ y') = (3 * (2 ^+ x * 3 ^+ y) : int).
@@ -483,15 +388,14 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     rewrite -eqz_nat.
     apply /eqP /(simplify_modulo _ _ m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: s_eq.
   move=> {s_eq} {s'_eq}; elim: i.
     move=> /=; lia.
   move=> pos' /= /eqP.
   rewrite eqSS.
   move=> /eqP /ord_inj -> {pos'}.
-  rewrite /lm2_step/= -instr_at_pos.
-  done.
+  by rewrite /lm2_step/= -instr_at_pos !eq_refl.
 - rewrite inE; move=> /orP; case.
   - move=> /eqP [] -> -> -> ->.
     rewrite -![m * _ * _]mulrA.
@@ -507,7 +411,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     have H: (2^+x * 3^+y) = 1 + 2*k.
       apply /(simplify_quotient (address_encoding i) pos.+1 m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     have x_eq_0: x = 0.
       admit.
@@ -523,7 +427,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       rewrite -eqz_nat.
       apply /eqP /(simplify_modulo _ _ m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     move=> {s_eq} {s'_eq}; elim: i.
       move=> /=; lia.
@@ -531,7 +435,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     rewrite eqSS.
     move=> /eqP /ord_inj -> {pos'}.
     rewrite /lm2_step/= -instr_at_pos.
-    by rewrite x_eq_0.
+    by rewrite x_eq_0 !eq_refl.
   - rewrite inE; move=> /eqP [] -> -> -> ->.
     rewrite -![m * _ * _]mulrA.
     have ->: 2 * m * k = m * (2 * k) by lia.
@@ -546,7 +450,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     have H: (2^+x * 3^+y) = 2 * k.
       apply /(simplify_quotient (address_encoding i) pos.+1 m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     move: s'_eq s_eq H.
     case: x; first admit; move=> x.
@@ -554,7 +458,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     have {H}: (2^+x * 3^+y) = k.
       apply /(simplify_quotient (address_encoding i) pos.+1 (m * 2)).
       move: (address_encoding_bound i); lia.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       rewrite -mulrA [2 * (_ * _)]mulrA -exprS -[_ * _ * k]mulrA.
       exact: s_eq.
     move: s'_eq => /[swap] <- s'_eq.
@@ -569,14 +473,14 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       rewrite -eqz_nat.
       apply /eqP /(simplify_modulo _ _ m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     move=> {s_eq} {s'_eq}; elim: i.
       move=> /=; lia.
     move=> pos' /= /eqP.
     rewrite eqSS.
     move=> /eqP /ord_inj -> {pos'}.
-    by rewrite /lm2_step/= -instr_at_pos.
+    by rewrite /lm2_step/= -instr_at_pos !eq_refl.
 - rewrite inE; move=> /orP; case.
     move=> /eqP [] -> -> -> ->.
     rewrite -![m * _ * _]mulrA.
@@ -592,7 +496,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     have H: (2^+x * 3^+y) = 1 + 3*k.
       apply /(simplify_quotient (address_encoding i) pos.+1 m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     have y_eq_0: y = 0.
       admit.
@@ -608,7 +512,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       rewrite -eqz_nat.
       apply /eqP /(simplify_modulo _ _ m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     move=> {s_eq} {s'_eq}; elim: i.
       move=> /=; lia.
@@ -616,7 +520,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     rewrite eqSS.
     move=> /eqP /ord_inj -> {pos'}.
     rewrite /lm2_step/= -instr_at_pos.
-    by rewrite y_eq_0.
+    by rewrite y_eq_0 !eq_refl.
   rewrite inE; move=> /orP; case.
     move=> /eqP [] -> -> -> ->.
     rewrite -![m * _ * _]mulrA.
@@ -632,7 +536,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     have H: (2^+x * 3^+y) = 2 + 3*k.
       apply /(simplify_quotient (address_encoding i) pos.+1 m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     have y_eq_0: y = 0.
       admit.
@@ -648,7 +552,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       rewrite -eqz_nat.
       apply /eqP /(simplify_modulo _ _ m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     move=> {s_eq} {s'_eq}; elim: i.
       move=> /=; lia.
@@ -656,7 +560,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     rewrite eqSS.
     move=> /eqP /ord_inj -> {pos'}.
     rewrite /lm2_step/= -instr_at_pos.
-    by rewrite y_eq_0.
+    by rewrite y_eq_0 !eq_refl.
   rewrite inE; move=> /eqP [] -> -> -> ->.
   rewrite -![m * _ * _]mulrA.
   have ->: 3 * m * k = m * (3 * k) by lia.
@@ -671,7 +575,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
   have H: (2^+x * 3^+y) = 3*k.
     apply /(simplify_quotient (address_encoding i) pos.+1 m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: s_eq.
   move: s'_eq s_eq H.
   case: y; first admit; move=> y.
@@ -679,7 +583,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
   have {H}: (2^+x * 3^+y) = k.
     apply /(simplify_quotient (address_encoding i) pos.+1 (m * 3)).
     move: (address_encoding_bound i); lia.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     rewrite -mulrA [3 * _]mulrA [3 * _]mulrC -[2^+x * 3 * _]mulrA -exprS -mulrA.
     exact: s_eq.
   move: s'_eq => /[swap] <- s'_eq.
@@ -694,14 +598,14 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     rewrite -eqz_nat.
     apply /eqP /(simplify_modulo _ _ m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: s_eq.
   move=> {s_eq} {s'_eq}; elim: i.
     move=> /=; lia.
   move=> pos' /= /eqP.
   rewrite eqSS.
   move=> /eqP /ord_inj -> {pos'}.
-  by rewrite /lm2_step /= -instr_at_pos.
+  by rewrite /lm2_step /= -instr_at_pos !eq_refl.
 Admitted.
 
 Lemma affineStep_equiv_lm2Step : forall s s',
@@ -747,7 +651,7 @@ elim: instr => [j|j|j l|j l].
   have <-: (2^+x * 3^+y) = k.
     apply /(simplify_quotient (address_encoding i) pos.+1 m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: eq.
   rewrite (divz_eq z m) addrC mulrC [2 * _]mulrC.
   rewrite -[m * 2 * _]mulrA [2 * (_ * _)]mulrA -exprS => {}eq.
@@ -770,7 +674,7 @@ elim: instr => [j|j|j l|j l].
   have <-: (2^+x * 3^+y) = k.
     apply /(simplify_quotient (address_encoding i) pos.+1 m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: eq.
   rewrite (divz_eq z m) addrC mulrC [3 * _]mulrC.
   rewrite -[m * 3 * _]mulrA.
@@ -795,7 +699,7 @@ elim: instr => [j|j|j l|j l].
     have <-: (2^+x * 3^+y) = 1 + 2*k.
       apply /(simplify_quotient (address_encoding i) pos.+1 m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: eq.
     move=> H.
     exists (j, (x, y)).
@@ -807,7 +711,7 @@ elim: instr => [j|j|j l|j l].
   have {eq}: (2^+x * 3^+y) = 2*k.
     apply /(simplify_quotient (address_encoding i) pos.+1 m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: eq.
   case: x; first admit; move=> x.
   rewrite exprS => eq.
@@ -822,7 +726,7 @@ elim: instr => [j|j|j l|j l].
     have <-: (2^+x * 3^+y) = 1 + 3*k.
       apply /(simplify_quotient (address_encoding i) pos.+1 m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: eq.
     move=> H.
     exists (j, (x, y)).
@@ -835,7 +739,7 @@ elim: instr => [j|j|j l|j l].
     have <-: (2^+x * 3^+y) = 2 + 3*k.
       apply /(simplify_quotient (address_encoding i) pos.+1 m).
       exact: address_encoding_bound.
-      by rewrite machine_length; have := ltn_ord pos; lia.
+      by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: eq.
     move=> H.
     exists (j, (x, y)).
@@ -847,7 +751,7 @@ elim: instr => [j|j|j l|j l].
   have {eq}: (2^+x * 3^+y) = 3*k.
     apply /(simplify_quotient (address_encoding i) pos.+1 m).
     exact: address_encoding_bound.
-    by rewrite machine_length; have := ltn_ord pos; lia.
+    by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: eq.
   case: y; first admit; move=> y.
   rewrite exprS => eq.
@@ -1004,12 +908,12 @@ move=> p.
 rewrite /lm2_step /=.
 set instr := lm2_instr_at M p.
 dependent induction instr.
-- by do ! case=> [->].
-- by do ! case=> [->].
+- by do ! move=> /andP [/andP [/eqP -> /eqP ->]] /eqP ->.
+- by do ! move=> /andP [/andP [/eqP -> /eqP ->]] /eqP ->.
 - dependent induction x;
-  by do ! case=> [->].
+  by do ! move=> /andP [/andP [/eqP -> /eqP ->]] /eqP ->.
 - dependent induction y;
-  by do ! case=> [->].
+  by do ! move=> /andP [/andP [/eqP -> /eqP ->]] /eqP ->.
 Qed.
 
 (* Note: copied from mm2_steps_confluent *)
