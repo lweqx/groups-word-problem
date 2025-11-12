@@ -7,7 +7,7 @@ From mathcomp Require Import ring lra zify.
 From Stdlib.Relations Require Import Relation_Operators Operators_Properties.
 From Stdlib.Program Require Import Equality.
 
-From GWP Require Import LM2.
+From GWP Require Import LM2 ReductionUtils.
 
 Import GRing.Theory.
 Open Scope int_scope.
@@ -637,7 +637,7 @@ by move=> /powers_injective [-> ->].
 Qed.
 
 Lemma affineStep_preserves_encoding : forall s y,
-  affineStep (state_encoding s) y -> exists s', y = state_encoding s'.
+  affineStep (state_encoding s) y -> exists s', state_encoding s' = y.
 Proof.
 move=> [i [x y]] z.
 case=> [[[p q] [p' q']]] [].
@@ -760,10 +760,10 @@ elim: instr => [j|j|j l|j l].
   lia.
 Admitted.
 
-Lemma affineStep_preserves_encoding_rev : forall s y,
-  affineStep y (state_encoding s) -> exists s', y = state_encoding s'.
+Lemma affineStep_preserves_encoding_rev : forall y s,
+  affineStep y (state_encoding s) -> exists s', state_encoding s' = y.
 Proof.
-move=> [i [x y]] z.
+move=> z [i [x y]].
 case=> [[[p q] [p' q']]] [].
 move=> /flattenP [] transitions /mapP [] pos _ ->.
 set instr := lm2_instr_at M pos.
@@ -868,35 +868,12 @@ Lemma affineSteps_equiv_lm2Steps : forall s s',
     <->
   (clos_refl_sym_trans _ lm2_step s s').
 Proof.
-move=> s s'; split.
-- move=> /clos_rst_rst1n_iff H; dependent induction H.
-    move: x => /state_encoding_injective ->.
-    exact /rst_refl.
-  case: H => /[dup] H.
-  - move=> /affineStep_preserves_encoding [] s'' y_decoding.
-    apply /(rst_trans _ _ _ s'').
-      apply /rst_step.
-      apply /(affineStep_equiv_lm2Step s s'').
-      rewrite -y_decoding.
-      exact H.
-    by apply: IHclos_refl_sym_trans_1n.
-  - move=> /affineStep_preserves_encoding_rev [] s'' y_decoding.
-    apply /(rst_trans _ _ _ s'').
-      apply /rst_sym /rst_step.
-      apply /(affineStep_equiv_lm2Step s'' s).
-      rewrite -y_decoding.
-      exact H.
-    by apply: IHclos_refl_sym_trans_1n.
-- move=> /clos_rst_rst1n_iff; elim.
-    move=> x; exact /rst_refl.
-  move=> x y z [] ? ? ?.
-  - apply /(rst_trans _ _ _ (state_encoding y)) => //.
-    exact /rst_step /affineStep_equiv_lm2Step.
-  - apply /(rst_trans _ _ _ (state_encoding y)) => //.
-    exact /rst_sym /rst_step /affineStep_equiv_lm2Step.
-(* Unset Printing Notations.
-Qed. *)
-Admitted.
+move=> s s'; apply: closRST_R_equiv_R'.
+- exact: state_encoding_injective.
+- exact: affineStep_equiv_lm2Step.
+- exact: affineStep_preserves_encoding.
+- exact: affineStep_preserves_encoding_rev.
+Qed.
 
 Lemma lm2Step_det: forall x y y',
   lm2_step x y -> lm2_step x y' -> y = y'.
@@ -915,49 +892,20 @@ dependent induction instr.
   by do ! move=> /andP [/andP [/eqP -> /eqP ->]] /eqP ->.
 Qed.
 
-(* Note: copied from mm2_steps_confluent *)
 Lemma lm2Steps_confluent : forall x y y',
             (clos_refl_trans _ lm2_step x y) -> (clos_refl_trans _ lm2_step x y') ->
   exists z, (clos_refl_trans _ lm2_step y z) /\ (clos_refl_trans _ lm2_step y' z).
-Proof.
-move=> x y y'.
-move=> /clos_rt_rt1n_iff H; elim: H y'.
-- move=> *. eexists. by split; [|apply rt_refl].
-- move=> ? {}y1 z1 Hx /clos_rt_rt1n_iff Hyz IH ? /clos_rt_rt1n_iff Hxy2.
-  case: Hxy2 Hx IH.
-  + move=> ? _. eexists. split; [apply: rt_refl|].
-    apply: rt_trans; [apply: rt_step|]; by eassumption.
-  + move=> y2 z2 /lm2Step_det Hx /clos_rt_rt1n_iff Hy2z2 /Hx {Hx} ? IH.
-    subst y2. move: Hy2z2 => /IH [z [??]].
-    by exists z.
-Qed.
+Proof. exact /R_confluent /lm2Step_det. Qed.
 
-Lemma ending_state_is_dead_end : forall x,
+Lemma ending_state_is_dead_end x:
     (clos_refl_trans _ lm2_step ending_state x) -> x = ending_state.
-Proof.
-move=> x.
-move /clos_rt_rt1n_iff => H.
-dependent induction H => //.
-Qed.
+Proof. move /clos_rt_rt1n_iff => H; dependent induction H => //. Qed.
 
 Lemma lm2Steps_to_stop_is_reversible : forall s,
   (clos_refl_trans _ lm2_step s ending_state)
     <->
   (clos_refl_sym_trans _ lm2_step s ending_state).
-Proof.
-move=> s; split.
-  move=> ?; exact /clos_rt_clos_rst.
-move /clos_rst_rst1n_iff.
-move=> H; dependent induction H; first by apply /rt_refl.
-case: H.
-- move=> ?; apply /(rt_trans _ _ _ y); first exact: rt_step.
-  exact: IHclos_refl_sym_trans_1n.
-- move=> H1.
-  have H2 : clos_refl_trans _ lm2_step y ending_state; first exact: IHclos_refl_sym_trans_1n.
-  case: (lm2Steps_confluent (rt_step _ _ _ _ H1) H2) => w [] /[swap] ?.
-  have : w = ending_state; last by move=> ->.
-  exact: ending_state_is_dead_end.
-Qed.
+Proof. by apply /R_to_stop_is_reversible; [exact: lm2Steps_confluent|exact: ending_state_is_dead_end]. Qed.
 
 End Reduction.
 
