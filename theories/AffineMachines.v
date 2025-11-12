@@ -636,7 +636,6 @@ have: (2 ^+ x * 3 ^+ y) = ((2 ^+ x' * 3 ^+ y') : int).
 by move=> /powers_injective [-> ->].
 Qed.
 
-(* Idea: this lemma could be used to simplify proofs above. *)
 Lemma affineStep_preserves_encoding : forall s y,
   affineStep (state_encoding s) y -> exists s', y = state_encoding s'.
 Proof.
