@@ -17,6 +17,7 @@ HB.mixin Record hasEq T := {
 HB.structure Definition EqProp := { T of hasEq T }.
 
 Infix "==" := eq (at level 70, no associativity).
+Notation "x == y :> T" := ((x: T) == (y: T)) (at level 70, no associativity).
 
 (* Defining Rocq relation classes.
    This enables the `reflexivity`/`symmetry`/`transitivity` tactics to work with `eqType`s. *)

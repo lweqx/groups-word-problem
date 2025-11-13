@@ -3,7 +3,7 @@ From Undecidability.Synthetic Require Import Undecidability.
 From Undecidability.MinskyMachines Require Import MM2 MM2_undec MM2_facts.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import seq.
-From mathcomp Require Import eqtype fintype ssrnat div.
+From mathcomp Require Import eqtype fintype ssrnat div intdiv.
 From mathcomp Require Import ring zify.
 From Stdlib.Relations Require Import Relation_Operators Operators_Properties.
 From Stdlib.Program Require Import Equality.
@@ -181,7 +181,19 @@ Proof. rewrite /fallback_target_address/= prednK ?ne0 ?modnn //=. Qed.
 
 Lemma fallback_target_address_normal pos: pos != ordlast ->
   address_encoding (fallback_target_address pos) = pos.+2.
-Admitted.
+Proof.
+move=> H.
+have: \val (ordS pos) != 0.
+  have <-: \val (ordS ordlast) = 0; first by rewrite /ordlast/= prednK ?modnn ?ne0 //.
+  by rewrite (inj_eq val_inj) (inj_eq (ordS_inj (n:=n))).
+rewrite /fallback_target_address.
+move=> /negbTE -> /=.
+rewrite modn_small => //.
+have /=: \val pos != \val ordlast; last first.
+  have := ltn_ord pos.
+  lia.
+by rewrite (inj_eq val_inj).
+Qed.
 
 Lemma mm_instr_at_nth (pos: 'I_n): mm2_instr_at (nth mm2_inc_a M pos) pos.+1 M.
 Admitted.
@@ -230,8 +242,10 @@ elim: instr Hinstr => [Hinstr |Hinstr |j Hinstr |j Hinstr] /=; [| | case: x => [
   apply /rt_step.
   exists (mm2_dec_a j); split; last exact /in_mm2s_dec_a0.
   rewrite /= Hinstr; exact /mm_instr_at_nth.
-- move=> /andP [/andP [/eqP -> /eqP ->]] /eqP ->.
-  Admitted.
+- admit.
+- admit.
+- admit.
+Admitted.
 (*
   move=> Hend.
   apply /(rt_trans _ _ _ (address_encoding (jump_target_address j), (x, y))) => //.

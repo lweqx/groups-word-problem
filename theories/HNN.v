@@ -27,9 +27,8 @@ Definition HNN_extension_eq (u v: HNN_extension) := match (u, v) with
   end.
 Lemma HNN_extension_eqP : eq_axiom HNN_extension_eq.
 Proof.
-elim=> [p||] [q||]; apply: (iffP idP) => //.
-by move=> /eqP ->.
-by move => [->]; rewrite /HNN_extension_eq.
+elim=> [p||] [q||]; apply: (iffP idP) => // [/eqP -> //|[] ->].
+by rewrite /HNN_extension_eq.
 Qed.
 HB.instance Definition _ := hasDecEq.Build HNN_extension HNN_extension_eqP.
 
@@ -38,24 +37,20 @@ Definition inj_word (w: G) := map HNN_group w.
 
 Definition relations := (map (fun '(u, v) => (inj_word u, inj_word v)) (@relations P)) ++
   [::
-    (`[HNN_b; HNN_b_inv], `[]);
-    (`[HNN_b_inv; HNN_b], `[])
+    ([:: HNN_b; HNN_b_inv], [::]);
+    ([:: HNN_b_inv; HNN_b], [::])
   ] ++
-  (map (fun u => (`[HNN_b] ++ (inj_word u), (inj_word u) ++ `[HNN_b])) genH).
+  (map (fun u => ([:: HNN_b] ++ (inj_word u), (inj_word u) ++ [:: HNN_b])) genH).
 HB.instance Definition _ := isPresentation.Build HNN_extension relations.
 
 Notation HNN := (presented HNN_extension).
 
-Lemma inj_word_morphism : forall (u v: G), u == v -> inj_word u == inj_word v.
+Lemma inj_word_morphism : forall (u v: G), u == v -> (inj_word u) == (inj_word v) :> HNN.
 Proof.
-move=> u v; elim=> [r a b H|||].
+move=> u v; elim=> [[a' b'] a b H|||].
 - rewrite /inj_word !map_cat.
-  apply: repeated_reduction.
-  apply: reduction_rule.
-  rewrite mem_cat.
-  apply /orP; left.
-  apply /mapP.
-  move: r H; case=> a' b' ?.
+  apply /repeated_reduction /reduction_rule.
+  rewrite mem_cat; apply /orP; left; apply /mapP.
   by exists (a', b').
 - reflexivity.
 - by symmetry.
@@ -128,7 +123,7 @@ rewrite mem_cat; move=> /orP [] H.
   exact: map_f.
 Qed.
 
-(* H = {x in G | tx = xt} *)
+(* H < {x in G | tx = xt} *)
 Lemma subgroup_caracterization_forward :
   forall (x: HNN), inSubgroup genH' x -> `[HNN_b] @ x == x @ `[HNN_b].
 Proof.
@@ -160,6 +155,7 @@ rewrite cat1s; symmetry.
 exact: prod1s a l.
 Qed.
 
+(* H > {x in G | tx = xt} *)
 Lemma subgroup_caracterization_backward :
   forall (x: HNN), `[HNN_b] @ x == x @ `[HNN_b] -> inSubgroup genH' x.
 Admitted.
@@ -182,6 +178,7 @@ Admitted.
    - need to introduce the notions of an equivalent presentation
 *)
 
+(* H = {x in G | tx = xt} *)
 Lemma subgroup_caracterization :
   forall (x: HNN), inSubgroup genH' x <-> `[HNN_b] @ x == x @ `[HNN_b].
 Proof.

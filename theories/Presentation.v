@@ -54,8 +54,12 @@ End WordProblem.
 
 (* `presented P` is the structure associated to the presentation `P := (Sigma; R)`.
    ie. `presented P` is Sigma^* quotiented by the smallest equivalence relation compatible with R *)
-(* Note: a Notation must be used here otherwise HB declares the mixin on the term 'presented P'. *)
-Notation "'presented' P" := (list (sigma P)) (at level 10).
+Definition presented P := (list (sigma P)).
+
+Section InstancesFromList.
+Variable P: presentationType.
+HB.instance Definition _ := Equality.copy (presented P) (list (sigma P)).
+End InstancesFromList.
 
 (* In a presented structure, equality is given as whether two words are derived. *)
 Section PresentedEq.
@@ -109,11 +113,11 @@ Lemma reduction_rule {P: presentationType}:
   (u, v) \in relations -> u == v.
 Proof.
 move=> u v Hin.
-transitivity (nil @ u @ nil).
+transitivity (e @ u @ e).
   by symmetry; apply: neutral_right.
-transitivity (nil @ v @ nil); last first.
+transitivity (e @ v @ e); last first.
   by apply: neutral_right.
-exact: (reduction nil nil).
+exact: (reduction e e).
 Qed.
 
 Lemma repeated_reduction_left {P: presentationType}:
@@ -141,7 +145,7 @@ move=> b u v; elim.
   by move: H; case r.
 - reflexivity.
 - by symmetry.
-- by move=> ? a; transitivity (a @ b).
+- by move=> ? a; transitivity ((a : presented P) @ b).
 Qed.
 
 Lemma repeated_reduction {P: presentationType}:
@@ -154,9 +158,9 @@ by apply: repeated_reduction_left.
 Qed.
 
 Module PresentationNotations.
-Notation "`[ ]" := ([::]) (format "`[ ]").
-Notation "'`[' x ']'" := ([:: x]).
-Notation "`[ x ; y ; .. ; z ]" := ((x :: (cons y .. [:: z] ..)))
+Notation "`[ ]" := ([::] : presented _) (format "`[ ]").
+Notation "'`[' x ']'" := ([:: x] : presented _).
+Notation "`[ x ; y ; .. ; z ]" := ((x :: (cons y .. [:: z] ..)) : presented _)
   (format "`[ '[' x ; '/' y ; '/' .. ; '/' z ']' ]").
 End PresentationNotations.
 
@@ -179,29 +183,22 @@ Definition inv_word (w: G) : G := map invl (rev w).
 
 Lemma inv_word_left : forall w: G, w @ (inv_word w) == e.
 Proof.
-move=> w; induction w.
-  exact: neutral_left.
+elim=> [|a w IH]; first exact: neutral_left.
 rewrite /inv_word/law/= rev_cons map_rcons -rcons_cat -cats1 -cat1s.
-have: `[a] @ (w @ inv_word w) @ `[invl a] == e; last by done.
-transitivity (`[a] @ e @ `[invl a]); first by apply: repeated_reduction.
-transitivity (`[a] @ `[invl a]); last first.
-  by apply: invl_left.
-apply: repeated_reduction_right.
-by apply: neutral_left.
+have: `[a] @ ((w: presented P) @ inv_word w) @ `[invl a] == e; last by done.
+transitivity (`[a] @ e @ `[invl a]); first exact: repeated_reduction.
+transitivity (`[a] @ `[invl a]); last exact: invl_left.
+exact /repeated_reduction_right /neutral_left.
 Qed.
 
 Lemma inv_word_right : forall w: G, (inv_word w) @ w == e.
 Proof.
-move=> w; induction w.
-  exact: neutral_left.
+elim=> [|a w IH]; first exact: neutral_left.
 rewrite /inv_word/law/= rev_cons map_rcons cat_rcons -cat1s -(cat1s a) !(catA _ _ w).
 have: (inv_word w) @ (`[invl a] @ `[a]) @ w == e; last by done.
-transitivity ((inv_word w) @ e @ w).
-  apply: repeated_reduction.
-  exact: invl_right.
+transitivity ((inv_word w) @ e @ w); first exact /repeated_reduction /invl_right.
 transitivity (inv_word w @ w); last done.
-apply: repeated_reduction_right.
-by apply: neutral_right.
+exact /repeated_reduction_right /neutral_right.
 Qed.
 
 HB.instance Definition _ := isGroup.Build G inv_word inv_word_left inv_word_right.

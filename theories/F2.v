@@ -17,10 +17,10 @@ Proof. by elim=> [] []; apply: (iffP idP). Qed.
 HB.instance Definition _ := hasDecEq.Build F2_sigma F2_sigma_eqP.
 
 HB.instance Definition _ := isPresentation.Build F2_sigma [::
-    (pair `[a; a_inv] `[]);
-    (pair `[b; b_inv] `[]);
-    (pair `[a_inv; a] `[]);
-    (pair `[b_inv; b] `[])
+    (pair [:: a; a_inv] [::]);
+    (pair [:: b; b_inv] [::]);
+    (pair [:: a_inv; a] [::]);
+    (pair [:: b_inv; b] [::])
   ].
 
 Notation F2 := (presented F2_sigma).
