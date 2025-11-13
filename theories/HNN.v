@@ -97,27 +97,11 @@ rewrite mem_cat; move=> /orP [] H.
   move: H => /mapP [u /[swap] ->].
   exact: map_f.
 - move: H => /mapP [u /[swap] ->] /mapP [v /[swap] ->] ?.
-  have : (inj_word v) @ (`[ HNN_b] @ inv (inj_word v)) == (inj_word v) @ (inv (inj_word v) @ `[ HNN_b]); last by exact: cancel_left.
-  have : ((inj_word v) @ (`[ HNN_b] @ inv (inj_word v))) @ (inj_word v) == ((inj_word v) @ (inv (inj_word v) @ `[ HNN_b])) @ (inj_word v); last by exact: cancel_right.
-  transitivity (((inj_word v @ `[ HNN_b]) @ inv (inj_word v)) @ inj_word v).
-    apply: repeated_reduction_right.
-    exact: associativity.
-  transitivity ((inj_word v @ `[ HNN_b]) @ (inv (inj_word v) @ inj_word v)).
-    symmetry; exact: associativity.
-  transitivity ((inj_word v @ `[ HNN_b]) @ e).
-    apply: repeated_reduction_left.
-    exact: inverse_right.
-  transitivity (((inj_word v @ inv (inj_word v)) @ `[ HNN_b]) @ inj_word v); last first.
-    apply: repeated_reduction_right.
-    symmetry; exact: associativity.
-  transitivity ((inj_word v @ inv (inj_word v)) @ (`[ HNN_b] @ inj_word v)); last first.
-    exact: associativity.
-  transitivity (e @ (`[ HNN_b] @ inj_word v)); last first.
-    apply: repeated_reduction_right.
-    symmetry; exact: inverse_left.
-  transitivity (inj_word v @ `[ HNN_b]); first by exact: neutral_right.
-  transitivity (`[ HNN_b] @ inj_word v); last by exact: neutral_left.
   symmetry.
+  apply /(cancel_left (inj_word v)) /(cancel_right (inj_word v)).
+  rewrite associativity inverse_left neutral_left.
+  rewrite -associativity -[(`[HNN_b] @ (inv (inj_word v))) @ _]associativity.
+  rewrite [inv (inj_word v) @ inj_word v]inverse_right neutral_right.
   apply: reduction_rule.
   do 2![rewrite mem_cat; apply /orP; right].
   exact: map_f.
@@ -132,27 +116,12 @@ transitivity (`[HNN_b] @ (prod l)); first by apply: repeated_reduction_left.
 transitivity ((prod l) @ `[HNN_b]); last by apply: repeated_reduction_right; symmetry.
 clear eq x.
 move: H; elim: l => [_|a l IH].
-  rewrite prod0.
-  by transitivity `[HNN_b]; do [| symmetry]; apply: neutral_left.
+  by rewrite prod0 neutral_left neutral_right; reflexivity.
 rewrite -cat1s all_cat all_seq1.
 move=> /andP [] a_generator Hlgen.
-transitivity (`[HNN_b] @ (a @ prod l)).
-  apply: repeated_reduction_left.
-  exact: prod1s a l.
-transitivity ((`[HNN_b] @ a) @ prod l); first exact: associativity.
-transitivity ((a @ `[HNN_b]) @ prod l).
-  apply: repeated_reduction_right.
-  exact: comm_b_gens.
-transitivity (a @ (`[HNN_b] @ prod l)).
-  symmetry; exact: associativity.
-transitivity (a @ (prod l @ `[HNN_b])).
-  apply: repeated_reduction_left.
-  exact: IH.
-transitivity ((a @ prod l) @ `[ HNN_b]).
-  exact: associativity.
-apply: repeated_reduction_right.
-rewrite cat1s; symmetry.
-exact: prod1s a l.
+rewrite (prod1s a l) associativity comm_b_gens //.
+rewrite -associativity -IH // associativity.
+reflexivity.
 Qed.
 
 (* H > {x in G | tx = xt} *)

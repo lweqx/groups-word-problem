@@ -1,5 +1,6 @@
 From HB Require Import structures.
 Require Import RelationClasses.
+Require Import Setoid Morphisms.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import seq eqtype.
 
@@ -148,6 +149,14 @@ move=> b u v; elim.
 - by move=> ? a; transitivity ((a : presented P) @ b).
 Qed.
 
+Global Instance : forall (P: presentationType), Proper (eq ==> eq ==> eq) (law : presented P -> presented _ -> presented _).
+Proof.
+move=> P a b eq_ab u v eq_uv.
+transitivity (a @ v).
+  exact /repeated_reduction_left.
+exact /repeated_reduction_right.
+Qed.
+
 Lemma repeated_reduction {P: presentationType}:
   forall (a b u v: presented P),
   u == v -> a @ u @ b == a @ v @ b.
@@ -186,9 +195,7 @@ Proof.
 elim=> [|a w IH]; first exact: neutral_left.
 rewrite /inv_word/law/= rev_cons map_rcons -rcons_cat -cats1 -cat1s.
 have: `[a] @ ((w: presented P) @ inv_word w) @ `[invl a] == e; last by done.
-transitivity (`[a] @ e @ `[invl a]); first exact: repeated_reduction.
-transitivity (`[a] @ `[invl a]); last exact: invl_left.
-exact /repeated_reduction_right /neutral_left.
+rewrite IH invl_left; reflexivity.
 Qed.
 
 Lemma inv_word_right : forall w: G, (inv_word w) @ w == e.
@@ -196,9 +203,7 @@ Proof.
 elim=> [|a w IH]; first exact: neutral_left.
 rewrite /inv_word/law/= rev_cons map_rcons cat_rcons -cat1s -(cat1s a) !(catA _ _ w).
 have: (inv_word w) @ (`[invl a] @ `[a]) @ w == e; last by done.
-transitivity ((inv_word w) @ e @ w); first exact /repeated_reduction /invl_right.
-transitivity (inv_word w @ w); last done.
-exact /repeated_reduction_right /neutral_right.
+rewrite invl_right neutral_right IH; reflexivity.
 Qed.
 
 HB.instance Definition _ := isGroup.Build G inv_word inv_word_left inv_word_right.
@@ -214,38 +219,16 @@ Variable a x y : G.
 
 Lemma cancel_left : a @ x == a @ y -> x == y.
 Proof.
-move=> ?.
-have : (inv a) @ a @ x == (inv a) @ a @ y.
-  transitivity ((inv a) @ (a @ x)); first by symmetry; exact: associativity.
-  transitivity ((inv a) @ (a @ y)); last by exact: associativity.
-  exact: repeated_reduction_left.
 move=> H.
-transitivity (e @ x); first exact: neutral_left.
-transitivity (e @ y); last exact: neutral_left.
-transitivity ((inv a @ a) @ x).
-  apply: repeated_reduction_right.
-  by symmetry; exact: inverse_right.
-transitivity ((inv a @ a) @ y); first done.
-apply: repeated_reduction_right.
-exact: inverse_right.
+rewrite -(neutral_left x) -(neutral_left y) -(inverse_right a) -!associativity.
+rewrite H; reflexivity.
 Qed.
 
 Lemma cancel_right : x @ a == y @ a -> x == y.
 Proof.
-move=> ?.
-have : x @ (a @ (inv a)) == y @ (a @ (inv a)).
-  transitivity ((x @ a) @ (inv a)); first by exact: associativity.
-  transitivity ((y @ a) @ (inv a)); last by symmetry; exact: associativity.
-  exact: repeated_reduction_right.
 move=> H.
-transitivity (x @ e); first by symmetry; exact: neutral_right.
-transitivity (y @ e); last exact: neutral_right.
-transitivity (x @ (a @ (inv a))).
-  apply: repeated_reduction_left.
-  by symmetry; exact: inverse_left.
-transitivity (y @ (a @ (inv a))); first done.
-apply: repeated_reduction_left.
-exact: inverse_left.
+rewrite -(neutral_right x) -(neutral_right y) -(inverse_left a) !associativity.
+rewrite H; reflexivity.
 Qed.
 
 End Cancelation.
