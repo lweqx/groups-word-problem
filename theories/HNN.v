@@ -127,25 +127,8 @@ Qed.
 (* H > {x in G | tx = xt} *)
 Lemma subgroup_caracterization_backward :
   forall (x: HNN), `[HNN_b] @ x == x @ `[HNN_b] -> inSubgroup genH' x.
+Proof.
 Admitted.
-
-(* proof plan:
-   - find an equivalent presentation of G that is convergent.
-   - prove that the resulting HNN presentation is convergent.
-   - if b x == x b, then reduced (b x) == reduced (x b)
-     so: reduced (b x) = reduced (x b)
-     if x is not in H:
-      reduced (b x) = b (reduced x)
-      reduced (x b) = (reduced x) b
-     so b (reduced x) = (reduced x) b
-     (reduced x) doesnt contain any b, so (reduced x) = [] = (reduced e)
-     so x = e, thus x in H: boom, explosion
-
-   technical difficulties:
-   - the standard convergent presentation of G might not be finite
-   - `reduced` is not computable if the presentation is not finite
-   - need to introduce the notions of an equivalent presentation
-*)
 
 (* H = {x in G | tx = xt} *)
 Lemma subgroup_caracterization :
