@@ -14,7 +14,10 @@ HB.mixin Record hasEq T := {
   symm : forall x y, eq x y -> eq y x;
   trans : forall x y z, eq x y -> eq y z -> eq x z;
 }.
+#[short(type = "equivType")]
 HB.structure Definition EqProp := { T of hasEq T }.
+
+Hint Resolve refl : core.
 
 Infix "==" := eq (at level 70, no associativity).
 Notation "x == y :> T" := ((x: T) == (y: T)) (at level 70, no associativity).
@@ -22,7 +25,7 @@ Notation "x == y :> T" := ((x: T) == (y: T)) (at level 70, no associativity).
 (* Defining Rocq relation classes.
    This enables the `reflexivity`/`symmetry`/`transitivity` tactics to work with `eqType`s. *)
 Section EqEquivalence.
-Variable T: EqProp.type.
+Variable T: equivType.
 Let eq := @eq T.
 
 Instance EqReflexivity : Reflexive eq.

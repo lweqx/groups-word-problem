@@ -101,7 +101,33 @@ Proof. move=> x; rewrite /concat /=; reflexivity. Qed.
 Let neutral_right : forall (x: M), x .@ epsilon == x.
 Proof. move=> x; rewrite /concat cats0; reflexivity. Qed.
 
-HB.instance Definition _ := isMonoid.Build M concat epsilon associativity neutral_left neutral_right.
+Lemma congruent_left: forall (a u v: M),
+  u == v -> a .@ u == a .@ v.
+Proof.
+move=> a u v; elim.
+- move=> r c b H.
+  rewrite /concat -!(catA c) !(catA a) !(catA (a ++ c)).
+  apply: (Derivation_reduction _ (r.1, r.2)).
+  by move: H; case r.
+- reflexivity.
+- by symmetry.
+- by move=> ? v'; transitivity (a .@ v').
+Qed.
+
+Lemma congruent_right: forall (b u v: M),
+  u == v -> u .@ b == v .@ b.
+Proof.
+move=> b u v; elim.
+- move=> r a c H.
+  rewrite /concat -!(catA a) -!(catA _ _ b) !(catA a).
+  apply: (Derivation_reduction _ (r.1, r.2)).
+  by move: H; case r.
+- reflexivity.
+- by symmetry.
+- by move=> ? a; transitivity (a .@ b).
+Qed.
+
+HB.instance Definition _ := isMonoid.Build M concat epsilon associativity neutral_left neutral_right congruent_left congruent_right.
 End PresentedMonoid.
 
 Lemma reduction {P: presentationType}:
@@ -119,51 +145,6 @@ transitivity (e @ u @ e).
 transitivity (e @ v @ e); last first.
   by apply: neutral_right.
 exact: (reduction e e).
-Qed.
-
-Lemma repeated_reduction_left {P: presentationType}:
-  forall (a u v: presented P),
-  u == v -> a @ u == a @ v.
-Proof.
-move=> a u v; elim.
-- move=> r c b H.
-  rewrite /law/= -!(catA c) !(catA a) !(catA (a ++ c)).
-  apply: reduction.
-  by move: H; case r.
-- reflexivity.
-- by symmetry.
-- by move=> ? v'; transitivity (a @ v').
-Qed.
-
-Lemma repeated_reduction_right {P: presentationType}:
-  forall (b u v: presented P),
-  u == v -> u @ b == v @ b.
-Proof.
-move=> b u v; elim.
-- move=> r a c H.
-  rewrite /law/= -!(catA a) -!(catA _ _ b) !(catA a).
-  apply: reduction.
-  by move: H; case r.
-- reflexivity.
-- by symmetry.
-- by move=> ? a; transitivity ((a : presented P) @ b).
-Qed.
-
-Global Instance : forall (P: presentationType), Proper (eq ==> eq ==> eq) (law : presented P -> presented _ -> presented _).
-Proof.
-move=> P a b eq_ab u v eq_uv.
-transitivity (a @ v).
-  exact /repeated_reduction_left.
-exact /repeated_reduction_right.
-Qed.
-
-Lemma repeated_reduction {P: presentationType}:
-  forall (a b u v: presented P),
-  u == v -> a @ u @ b == a @ v @ b.
-Proof.
-move=> a b u v eq.
-apply: repeated_reduction_right.
-by apply: repeated_reduction_left.
 Qed.
 
 Module PresentationNotations.
