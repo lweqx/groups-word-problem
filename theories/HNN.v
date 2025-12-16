@@ -1,6 +1,75 @@
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
-From mathcomp Require Import seq eqtype.
+From mathcomp Require Import seq eqtype fintype tuple.
+
+From GWP Require Import Presentation EquivalenceAlgebra Equivalence.
+
+(* First HNN extension *)
+Section HNN.
+Variable G: group.
+Variable isos: seq (local_morphism G).
+Let isos_count := size isos.
+
+Definition HNN_nth_iso (i: 'I_isos_count): local_morphism G :=
+  nth (morphism_to_local_morphism (identity_morphism G)) isos i.
+
+Definition HNN: group.
+Admitted.
+
+Definition HNN_extension_base := G.
+
+Definition HNN_injection: injectiveMorphism HNN_extension_base HNN.
+Admitted.
+HB.instance Definition _ := isSubgroup.Build HNN HNN_extension_base HNN_injection.
+
+Definition HNN_ts: isos_count.-tuple HNN.
+Admitted.
+
+Lemma iso_representation: forall i: 'I_isos_count,
+  let t := tnth HNN_ts i in
+  let lm := HNN_nth_iso i in
+  forall (x: lm.(lm_source_subgroup)), subgroup_inj (subgroup_inj (lm x) : HNN_extension_base) == t @ (subgroup_inj (subgroup_inj x : HNN_extension_base)) @ (inv t).
+Admitted.
+
+Section HNNStableSubgroup.
+Variable K: subgroup G.
+
+Hypothesis K_invariance: forall i: 'I_isos_count, is_subgroup_stable (HNN_nth_iso i) K.
+
+Definition HNN_subgroup_ts_extension : HNN -> Prop.
+Admitted.
+
+Lemma HNNsgte_law: forall x y : HNN,
+  HNN_subgroup_ts_extension x ->
+  HNN_subgroup_ts_extension y -> HNN_subgroup_ts_extension (x @ y).
+Admitted.
+
+Lemma HNNsgte_neutral: HNN_subgroup_ts_extension e.
+Admitted.
+
+Lemma HNNsgte_inv: forall x : HNN,
+  HNN_subgroup_ts_extension x -> HNN_subgroup_ts_extension (inv x).
+Admitted.
+
+HB.instance Definition _ := isSubgroupCharacterizer.Build HNN HNN_subgroup_ts_extension HNNsgte_law HNNsgte_neutral HNNsgte_inv.
+
+Let K_extended := subgroup_by HNN_subgroup_ts_extension.
+
+(* <K, t1, ..., tn> \cap G = G *)
+(* x \in G -> x \in <K, t1, ..., tn> *)
+Lemma HNN_stable_inter_G_is_G : forall (x: G), (subgroup_inj (x: HNN_extension_base)) \insubgroup (K_extended: subgroup HNN).
+Admitted.
+
+End HNNStableSubgroup.
+End HNN.
+Arguments HNN_stable_inter_G_is_G {G} isos K.
+Arguments HNN {G}.
+Arguments HNN_ts {G}.
+
+(*
+From HB Require Import structures.
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import seq eqtype fintype.
 
 From GWP Require Import Presentation EquivalenceAlgebra Equivalence.
 
@@ -141,3 +210,29 @@ Qed.
 
 End HNN.
 
+Section HNNIso.
+
+Variable P: invertiblePresentationType.
+Let G := presented P.
+
+Variable n: nat.
+(* n subgroups of G given by their list of generators.
+   H1, ..., Hn *)
+Variable subgroups: seq (seq G).
+Hypothesis n_subgroups: size subgroups = n.
+(* list of isos with domains H1, ..., Hn *)
+Variable isos: seq (G -> G).
+Hypothesis n_isos: size isos = n.
+Let iso i := nth id isos i.
+
+Definition free_familly (f: seq G) :=
+  
+Definition morphism_is_iso (H: seq G) (iso: G -> G) :=
+  [seq iso h | h <- H].
+
+Hypothesis isos_are_iso: forall i: 'I_n,
+  [seq iso i.
+
+End HNNIso.
+
+*)

@@ -171,6 +171,9 @@ Notation G := (presented P).
 
 Definition inv_word (w: G) : G := map invl (rev w).
 
+Lemma inv_word_law : forall x y: G, inv_word (x @ y) == (inv_word y) @ (inv_word x).
+Proof. by move=> x y; rewrite /inv_word/=/law/= !map_rev map_cat rev_cat. Qed.
+
 Lemma inv_word_left : forall w: G, w @ (inv_word w) == e.
 Proof.
 elim=> [|a w IH]; first exact: neutral_left.
@@ -187,7 +190,7 @@ have: (inv_word w) @ (`[invl a] @ `[a]) @ w == e; last by done.
 rewrite invl_right neutral_right IH; reflexivity.
 Qed.
 
-HB.instance Definition _ := isGroup.Build G inv_word inv_word_left inv_word_right.
+HB.instance Definition _ := isGroup.Build G inv_word inv_word_law inv_word_left inv_word_right.
 
 End InvertiblePresentedGroup.
 
