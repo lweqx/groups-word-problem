@@ -238,16 +238,29 @@ Definition normalize_F2_letter (c: F2_sigma): F2_sigma * int := match c with
   | b_inv => (b, -1)
   end.
 
-Definition append_letters_to_count (a: F2_sigma) (occ: int) (count: seq (F2_sigma * int)) := match count with
+Definition append_letters_to_count_head (a: F2_sigma) (occ: int) (count_head: F2_sigma * int) :=
+  let '(topn, topc) := count_head in
+  let '(an, ac) := normalize_F2_letter a in
+  if an == topn then (
+    let count := topc + ac * occ in
+    [::(topn, count)]
+  )
+  else [:: (an, ac * occ); (topn, topc)].
+
+Definition append_letters_to_count_prefilter (a: F2_sigma) (occ: int) (count: seq (F2_sigma * int)) :=
+  match count with
   | nil => let '(an, ac) := normalize_F2_letter a in [::(an, ac * occ)]
-  | (topn, topc)::l => let '(an, ac) := normalize_F2_letter a in
-    if an == topn then (
-      let count := topc + ac * occ in
-      if count == 0 then l
-      else (topn, count)::l
-    )
-    else (an, ac * occ)::(topn, topc)::l
+  | top::l => (append_letters_to_count_head a occ top) ++ l
   end.
+
+Definition counts_remove_zeroes (count: seq (F2_sigma * int)) :=
+  filter (fun '(c, x) => x != 0) count.
+
+Lemma remove_zeroes_cat l l': counts_remove_zeroes (l ++ l') = (counts_remove_zeroes l) ++ (counts_remove_zeroes l').
+Proof. by rewrite /counts_remove_zeroes filter_cat. Qed.
+
+Definition append_letters_to_count (a: F2_sigma) (occ: int) (count: seq (F2_sigma * int)) :=
+  counts_remove_zeroes (append_letters_to_count_prefilter a occ count).
 
 Fixpoint F2_count_letters (w: F2): seq (F2_sigma * int) := match w with
   | nil => nil
@@ -260,31 +273,234 @@ Definition F2_dec_eq (w w': F2): bool :=
 Lemma F2_dec_eq_reflect (w w': F2): reflect (w == w') (F2_dec_eq w w').
 Admitted.
 
-Definition iso_of_transition_gens (t: Transition) (w: F2) :=
-       if F2_dec_eq w (encoding t.1.1)       then encoding t.2.1
-  else if F2_dec_eq w (inv (encoding t.1.1)) then inv (encoding t.2.1)
-  else if F2_dec_eq w (power (`[b]: F2) t.1.2) then power (`[b]: F2) t.2.2
-  else if F2_dec_eq w (inv (power (`[b]: F2) t.1.2)) then inv (power (`[b]: F2) t.2.2)
-  else w (* whatever but using w allows more general lemma to be stated below *).
-
 Fixpoint merge_counts l l' := match l with
   | nil => l'
-  | (an, ac)::l =>
-      let lo := merge_counts l l' in
-      append_letters_to_count an ac lo
+  | (an, ac)::l => append_letters_to_count an ac (merge_counts l l')
   end.
 
-Lemma append_letter_inv c k l:
+Lemma append_letters_inv c k l:
   append_letters_to_count c k l = append_letters_to_count (F2_invl c) (-k) l.
-Proof. by elim: l => [/=|[topc topn] l /=]; case: c => /=; rewrite ?mulrNN ?mul1r ?mulN1r. Qed.
+Proof. rewrite /append_letters_to_count; by elim: l => [/=|[topc topn] l /=]; case: c => /=; rewrite ?mulrNN ?mul1r ?mulN1r. Qed.
+
+Lemma merge_counts_cat' l1 l2 l3:
+  merge_counts (l1 ++ l2) l3 = merge_counts l1 (merge_counts l2 l3).
+Proof. by elim: l1 l2 l3 => // c l1 IH /= l2 l3; rewrite IH. Qed.
+
+Lemma merge_counts_cons topc topn l2 l3:
+  merge_counts ((topc, topn)::l2) l3 = append_letters_to_count topc topn (merge_counts l2 l3).
+Proof. done. Qed.
+
+Lemma append_letters_cons top c k l':
+  append_letters_to_count c k (top::l') = (append_letters_to_count c k [::top]) ++ (counts_remove_zeroes l').
+Proof. by rewrite /append_letters_to_count /= cats0 remove_zeroes_cat. Qed.
+
+Lemma append_letters_cat c k l l':
+  (counts_remove_zeroes l) != nil ->
+  append_letters_to_count c k (l ++ l') = (append_letters_to_count c k l) ++ (counts_remove_zeroes l').
+Proof. 
+elim: l => // [a l] IH _.
+rewrite cat_cons [append_letters_to_count c k (a::(l ++ l'))]append_letters_cons.
+rewrite [append_letters_to_count c k (a::l)]append_letters_cons.
+by rewrite remove_zeroes_cat catA.
+Qed.
+
+Lemma append_letters_0 c k:
+  append_letters_to_count c k nil = if k != 0
+    then let '(topc, topn) := normalize_F2_letter c in [:: (topc, topn * k)]
+    else [::].
+Proof.
+rewrite /append_letters_to_count/=.
+by case: c => /=; rewrite ?mul1r ?mulN1r ?addr0 ?oppr_eq0.
+Qed.
+
+Lemma counts_remove_zeroes_projective l:
+  counts_remove_zeroes (counts_remove_zeroes l) = counts_remove_zeroes l.
+Proof. by rewrite /counts_remove_zeroes filter_id. Qed.
+
+Lemma append_letters_1s c k topc topn l:
+  append_letters_to_count c k ((topc, topn) :: l) = counts_remove_zeroes ((c, k)::(append_letters_to_count topc topn l)).
+Proof.
+rewrite /append_letters_to_count /append_letters_to_count_prefilter.
+
+
+rewrite remove_zeroes_cat.
+
+Lemma append_same_cancel c k l:
+  append_letters_to_count c k (append_letters_to_count c (-k) l)
+    =
+  counts_remove_zeroes l.
+Proof.
+elim: l => [|[topc topn] l].
+  rewrite append_letters_0 /=.
+  case: c => /=;
+  rewrite ?mul1r ?mulrN ?mulN1r ?opprK oppr_eq0;
+  by have /orP [->|/negPn /[dup] H -> /=] := orbN (k != 0); do [
+    rewrite /append_letters_to_count/append_letters_to_count_prefilter /=;
+    rewrite ?mul1r ?mulN1r ?[-k + k]addrC;
+    (* this has to be an already existing lemma *)
+    have ->: k - k = 0 by lia;
+    by rewrite eq_refl /=
+    |
+    by rewrite append_letters_0 /= ?mul1r ?mulN1r H
+  ].
+move=> IH /=.
+
+
+rewrite /append_letters_to_count /append_letters_to_count_prefilter /=.
+case: c => /=; case: topc => /=.
+rewrite !mul1r.
+have /orP [/[dup] H ->|/negPn /[dup] H ->] := orbN (topn - k != 0).
++ have /orP [/[dup] H' ->|/negPn /[dup] H' -> /=] := orbN (topn != 0).
+  - rewrite remove_zeroes_cat.
+    rewrite /append_letters_to_count_head /=.
+    rewrite mul1r subrK H' cat1s.
+    by rewrite counts_remove_zeroes_projective.
+  - by rewrite mul1r subrK H' /= counts_remove_zeroes_projective.
++ have /= ->: topn = k by lia.
+  admit.
+
+have /orP [/[dup] H ->|/negPn /[dup] H ->] := orbN (topn - k != 0).
++ have /orP [/[dup] H' ->|/negPn /[dup] H' -> /=] := orbN (topn != 0).
+  - rewrite remove_zeroes_cat.
+    rewrite /append_letters_to_count_head /=.
+    rewrite mul1r subrK H' cat1s.
+    by rewrite counts_remove_zeroes_projective.
+  - by rewrite mul1r subrK H' /= counts_remove_zeroes_projective.
++ have /= ->: topn = k by lia.
+  admit.
+
+  set l' := counts_remove_zeroes l.
+  elim: l' a => // a' l' IH a.
+  rewrite remove_zeroes_cat.
+  transitivity ((if k != 0 then [:: (a, k)] else [::]) ++ []).
+
+, a' & l'] else a' :: l').
+
+  elim: (counts_remove_zeroes l) => [|c l'].
+    admit.
+
+
+
+
+
+simpl.
+rewrite {2}/append_letters_to_count/append_letters_to_count_prefilter /=.
+case: c => /=; case: topc => /=.
+rewrite !mul1r.
+
+
+have /orP [-> /=|/negPn /[dup] ? ->] := orbN (topn - k != 0).
+  by rewrite !mul1r subrK counts_remove_zeroes_projective.
+have ->: topn = k by lia.
+simpl.
+
+by rewrite !mul1r subrK counts_remove_zeroes_projective.
+
+?[-k + k]addrC.
+(* this has to be an already existing lemma *)
+have ->: k - k = 0 by lia;
+
+Admitted.
+
+Lemma append_letters_0 c l: append_letters_to_count c 0 l = counts_remove_zeroes l.
+Proof.
+elim: l => [|[topn topc] l /=].
+  rewrite /append_letters_to_count /=.
+  by case: c.
+have /orP [/[dup] H ->|/[dup] H ->] := orbN (topc == 0)%B;
+rewrite /append_letters_to_count /= remove_zeroes_cat;
+by case: c => /=; case: topn => /=; rewrite ?mul1r ?addr0 H /=.
+Qed.
+
+Lemma append_same_add c k k' l:
+    k + k' != 0 ->
+   append_letters_to_count c k (append_letters_to_count c k' l) = append_letters_to_count c (k + k') l.
+Proof.
+case: l => [|[topc topn] l].
+  admit.
+(*
+  case: c => /=.
+  by rewrite 3!mul1r addrC=> /negbTE ->.
+  rewrite 3!mulN1r addrC => ?; have /negbTE ->: (- k' - k != 0) by lia.
+  by rewrite cats0 opprD.
+  by rewrite 3!mul1r addrC=> /negbTE ->.
+  rewrite 3!mulN1r addrC => ?; have /negbTE ->: (- k' - k != 0) by lia.
+  by rewrite cats0 opprD.
+rewrite append_letters_cons -[(topc, topn)::l]cat1s.
+rewrite [append_letters_to_count _ (k + k') _]append_letters_cons.
+simpl.
+case: c => /=.
+rewrite !cats0.
+case: topc => /=.
+rewrite !mul1r.
+have /orP [/[dup] ? ->|] := orbN (topn + k' == 0)%B.
+rewrite cat0s.
+have /orP [/[dup] ? ->|] := orbN (topn + (k + k') == 0)%B.
+rewrite cat0s.
+have ->: k = 0 by lia.
+move=> _.
+
+
+
+
+*)
+
+Admitted.
+
+Lemma merge_counts_remove_append: forall l l' c k,
+  merge_counts (append_letters_to_count c k l) l' = merge_counts ((c, k)::l) l'.
+Proof.
+elim => [l' c k /=|top l IH l' c' k'].
+  admit.
+(*  by case: c => /=; rewrite ?mul1r // mulN1r append_letters_inv /= opprK. *)
+rewrite [merge_counts [:: _, _ & _] _]/=.
+case: top => c k.
+rewrite append_letters_cons merge_counts_cat'.
+case: c'; case: c.
+- rewrite /= mul1r cats0.
+  have /orP [/[dup] ? ->|/[dup] ? /negbTE ->] := orbN (k + k' == 0).
+  + have ->: k = -k' by lia.
+    by rewrite append_same_cancel.
+  + by rewrite append_same_add /= addrC.
+- by rewrite /= mul1r.
+- by rewrite /= mul1r.
+- by rewrite /= mul1r.
+- rewrite /= mulN1r cats0.
+  rewrite append_letters_inv /= -{3}[k]opprK.
+  have /orP [/[dup] ? ->|/[dup] ? /negbTE ->] := orbN (k - k' == 0).
+  + have <-: k = k' by lia.
+    by rewrite append_same_cancel.
+  + by rewrite append_same_add addrC opprK.
+- by rewrite /= mulN1r append_letters_inv /= opprK.
+- by rewrite /= mulN1r append_letters_inv /= opprK.
+- by rewrite /= mulN1r append_letters_inv /= opprK.
+- by rewrite /= mul1r.
+- by rewrite /= mul1r.
+- rewrite /= mul1r cats0.
+  have /orP [/[dup] ? ->|/[dup] ? /negbTE ->] := orbN (k + k' == 0).
+  + have ->: k = -k' by lia.
+    by rewrite append_same_cancel.
+  + by rewrite append_same_add /= addrC.
+- by rewrite /= mul1r.
+- by rewrite /= mulN1r append_letters_inv /= opprK.
+- by rewrite /= mulN1r append_letters_inv /= opprK.
+- rewrite /= mulN1r cats0.
+  rewrite append_letters_inv /= -{3}[k]opprK.
+  have /orP [/[dup] ? ->|/[dup] ? /negbTE ->] := orbN (k - k' == 0).
+  + have <-: k = k' by lia.
+    by rewrite append_same_cancel.
+  + by rewrite append_same_add addrC opprK.
+- by rewrite /= mulN1r append_letters_inv /= opprK.
+Qed.
 
 Lemma merge_counts_append_letters_C l l' c k:
   append_letters_to_count c k (merge_counts l l') = merge_counts (append_letters_to_count c k l) l'.
 Proof.
-elim: l => [/=|[topn topc] l].
-  by case: c => /=; rewrite ?mul1r // append_letter_inv mulN1r /=.
-rewrite [merge_counts ((topn, topc) :: l) l']/=.
-Admitted.
+elim: l c k => [/= c k|[topn topc] l IH c k].
+  by case: c => /=; rewrite ?mul1r // append_letters_inv mulN1r /=.
+rewrite [merge_counts ((topn, topc) :: l) l']/= {}IH.
+by rewrite !merge_counts_remove_append.
+Qed.
 
 Lemma count_letters_cat (w w': F2):
   F2_count_letters (w @ w') = merge_counts (F2_count_letters w) (F2_count_letters w').
@@ -313,6 +529,13 @@ elim => // [k IH|k IH].
   elim: k => //= k IH IH'.
 Admitted.
 *)
+
+Definition iso_of_transition_gens (t: Transition) (w: F2) :=
+       if F2_dec_eq w (encoding t.1.1)       then encoding t.2.1
+  else if F2_dec_eq w (inv (encoding t.1.1)) then inv (encoding t.2.1)
+  else if F2_dec_eq w (power (`[b]: F2) t.1.2) then power (`[b]: F2) t.2.2
+  else if F2_dec_eq w (inv (power (`[b]: F2) t.1.2)) then inv (power (`[b]: F2) t.2.2)
+  else w (* whatever but using w allows more general lemma to be stated below *).
 
 Lemma affine_state_encoding_gens_transition (s1 s2: State):
     (affine_state_encoding_gens s2) = map (iso_of_transition_gens (s1, s2)) (affine_state_encoding_gens s1).
@@ -552,6 +775,19 @@ unshelve eexists.
   by left; exists z.
 done.
 Qed.
+
+Lemma encoding_free zs z':
+  prod [seq encoding z | z <- zs] == encoding z' -> z' \in zs.
+Proof.
+move=> /F2_dec_eq_reflect; rewrite /F2_dec_eq.
+elim: zs z' => [/= z'|z' zs IH y /=].
+  rewrite /encoding power_inv -(inverse_left (power (`[b]: F2) z')) => R.
+  have := cancel_right _ _ _ R.
+  rewrite -{1}[power (`[b]: F2) z']neutral_right => {}R.
+  have := cancel_left _ _ _ R.
+  by move=> /F2_dec_eq_reflect.
+
+have /orP [] := orbN (z' == y).
 
 Lemma equiv_m_if_inH:
     (encoding z) \insubgroup K
