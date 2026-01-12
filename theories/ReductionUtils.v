@@ -51,6 +51,42 @@ Qed.
 
 End Step_to_ClosRST.
 
+Section Step_to_ClosRT.
+
+Variable A B: Type.
+Variable R: A -> A -> Prop.
+Variable R': B -> B -> Prop.
+
+Hypothesis encoding: B -> A.
+Hypothesis encoding_injective: forall x x', encoding x = encoding x' -> x = x'.
+
+Hypothesis equiv_R_R': forall s s', R (encoding s) (encoding s') <-> R' s s'.
+
+Hypothesis R_preserves_encoding_right: forall s x', R (encoding s) x' -> exists s', encoding s' = x'.
+
+Lemma closRT_R_equiv_R' : forall s s',
+  (clos_refl_trans _ R (encoding s) (encoding s'))
+    <->
+  (clos_refl_trans _ R' s s').
+Proof.
+move=> s s'; split.
+- move=> /clos_rt_rt1n_iff H; dependent induction H.
+    move: x => /encoding_injective ->.
+    exact /rt_refl.
+  move: (H) => /R_preserves_encoding_right [] s'' y_decoding.
+  apply /(rt_trans _ _ _ s''); last first.
+    exact: (IHclos_refl_trans_1n R R' encoding).
+  apply /rt_step /(equiv_R_R' s s'').
+  rewrite y_decoding.
+  exact H.
+- move=> /clos_rt_rt1n_iff; elim=> [x|x y z ? ?].
+    exact /rt_refl.
+  apply /(rt_trans _ _ _ (encoding y)) => //.
+  exact /rt_step /equiv_R_R'.
+Qed.
+
+End Step_to_ClosRT.
+
 Section ConfluenceFromDeterminism.
 
 Variable A: Type.
@@ -117,3 +153,38 @@ case: H.
 Qed.
 
 End StepToDeadendReversibility.
+
+Lemma P_propagates_back_extended (A: Type) (P: A -> Prop) (R: A -> A -> Prop)
+    (P_propagates_back: forall x y, P y -> R x y -> P x):
+  forall s s', clos_refl_trans _ R s s' -> P s' -> P s.
+Proof.
+move=> s s' H.
+dependent induction H => // ?.
+- exact: (P_propagates_back x y).
+- exact /IHclos_refl_trans1 /IHclos_refl_trans2.
+Qed.
+
+Lemma clos_rt_impl_with_cond (A B: Type) (P: A -> Prop) (R: A -> A -> Prop) (R': B -> B -> Prop)
+    (encoding: B -> A) (encoding_injective: forall x x', (P (encoding x')) -> encoding x = encoding x' -> x = x')
+    (R_impl_R': forall s s', P (encoding s') -> R (encoding s) (encoding s') -> R' s s')
+    (R_preserves_encoding_right: forall s x', R (encoding s) x' -> exists s', encoding s' = x')
+    (P_propagates_back: forall x y, P y -> R x y -> P x):
+  forall s s', P (encoding s')
+    ->
+  clos_refl_trans _ R (encoding s) (encoding s')
+    ->
+  clos_refl_trans _ R' s s'.
+Proof.
+move=> s s' Hend.
+move=> /clos_rt_rt1n_iff H.
+dependent induction H.
+- move: x => /encoding_injective -> //.
+  exact /rt_refl.
+- move: (H) => /R_preserves_encoding_right [s'' H'].
+  apply /(rt_trans _ _ _ s'').
+    apply /rt_step /R_impl_R'; last by rewrite H'.
+    rewrite H'.
+    apply: (P_propagates_back_extended _ _ R _ y (encoding s')) => //.
+    exact /clos_rt_rt1n_iff.
+  exact: (IHclos_refl_trans_1n P R R' encoding).
+Qed.

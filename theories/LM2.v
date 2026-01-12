@@ -13,7 +13,6 @@ From GWP Require Import ReductionUtils.
 Section LM2E_exploding.
 (* Number of instructions in the machine. *)
 Variable n: nat.
-Hypothesis machine_non_empty: (n > 0)%N.
 
 (* Instruction addresses, 0 = "program end" *)
 Inductive lm2e_addr : Type :=
@@ -75,13 +74,35 @@ Definition lm2e_step (s s': lm2e_state) := if e_index s is lm2e_addr_instr pos t
     end
   ) else False (* machine is stopped *).
 
+Definition lm2e_initial_state := fun x y : nat =>
+  let n' := n in
+  (fun a f => f a) erefl
+    ((fun (evar_0_ : (fun n0 : nat => n = n0 -> lm2e_state) 0)
+        (evar_0_0 : forall n0 : nat, (fun n1 : nat => n = n1 -> lm2e_state) n0.+1) =>
+      match n' as n0 return ((fun n1 : nat => n = n1 -> lm2e_state) n0) with
+      | 0 => evar_0_
+      | n.+1 => evar_0_0 n
+      end) (fun=> (lm2e_addr_stop, (x, y)))
+      (fun (n'0 : nat) (Hn : n = n'0.+1) =>
+        (lm2e_addr_instr
+          (Ordinal
+              ((fun evar_0_ : 0 < n'0.+1 =>
+                eq_ind_r (fun pattern_value_ : nat => 0 < pattern_value_) evar_0_ Hn) erefl)),
+        (x, y)))).
+(* TODO: The definition above was obtained by replacing `ssr_have_upoly` lambda-term of 
+   the definition below by a transparent equivalent.
+
 Definition lm2e_initial_state (x y: nat) : lm2e_state.
 Proof.
-apply: pair.
-  apply: lm2e_addr_instr.
-  by exists 0.
-exact: (x, y).
-Qed.
+set n' := n.
+have: n = n' by done.
+case: n' => [Hn|n' Hn].
+  exact: (lm2e_addr_stop, (x, y)).
+refine ((lm2e_addr_instr _), (x, y)).
+exists 0.
+by rewrite Hn.
+Defined.
+*)
 
 Definition lm2e_ending_state: lm2e_state := (lm2e_addr_stop, (0, 0)).
 
@@ -95,15 +116,14 @@ Arguments e_value_y _ _ /.
 Record Lm2eHaltsArguments := {
   lm2e_halts_arguments_n: nat;
   lm2e_halts_arguments_M: lm2e_machine lm2e_halts_arguments_n;
-  lm2e_halts_arguments_ne0: (0 < lm2e_halts_arguments_n)%N;
   lm2e_halts_arguments_x: nat;
   lm2e_halts_arguments_y: nat;
 }.
 Definition LM2E_HALTS_uncurried (args: Lm2eHaltsArguments) :=
-  LM2E_HALTS (lm2e_halts_arguments_ne0 args) (lm2e_halts_arguments_M args) (lm2e_halts_arguments_x args) (lm2e_halts_arguments_y args).
+  LM2E_HALTS (lm2e_halts_arguments_M args) (lm2e_halts_arguments_x args) (lm2e_halts_arguments_y args).
 
-Module LM2EReduction.
-Section LM2EReduction.
+Module LM2EReductionNe0.
+Section LM2EReductionNe0.
 
 Variable P: MM2_PROBLEM.
 Let M := P.1.1.
@@ -116,9 +136,7 @@ Notation lm2e_addr := (lm2e_addr n).
 Notation lm2e_state := (lm2e_state n).
 Notation mm2_step := (mm2_step M).
 
-(* TODO: do a case analysis whether the machine is empty *)
-Definition ne0 : n > 0.
-Admitted.
+Hypothesis ne0 : n > 0.
 
 Definition fallback_target_address (i: 'I_n) : lm2e_addr :=
   (* if we move to a out-of-bounds address, the machine explodes *)
@@ -154,7 +172,6 @@ Let lm2e_step := (lm2e_step M').
 Definition reduction_output : Lm2eHaltsArguments := {|
   lm2e_halts_arguments_n := n;
   lm2e_halts_arguments_M := M';
-  lm2e_halts_arguments_ne0 := ne0;
   lm2e_halts_arguments_x := initial_a;
   lm2e_halts_arguments_y := initial_b;
 |}.
@@ -499,17 +516,13 @@ Lemma state_encoding_inj x y:
 Proof.
 case: x => [i [a b]].
 case: y => [i' [a' b']].
-case: i => [|i|i]; case: i' => [|i'|i'].
+case: i => [|i|i]; case: i' => [|i'|i']; try by case; lia.
 - by case=> -> ->.
-- by case; lia.
-- by case; lia.
-- by case; lia.
 - case=> /eqP.
   by rewrite (inj_eq (@ord_inj n)) => /eqP -> -> ->.
 - case.
   have := ltn_ord i.
   lia.
-- by case; lia.
 - case.
   have := ltn_ord i'.
   lia.
@@ -567,6 +580,7 @@ elim: instr => /= [| |l|l]; elim; do [
 ].
 Qed.
 
+(*
 Lemma mm2Step_preserves_encoding_left: forall x s',
     mm2_step x (state_encoding s') -> exists s, state_encoding s = x.
 Proof.
@@ -604,17 +618,74 @@ elim: instr => /= [| |l|l]; elim; do [
   by rewrite /state_encoding/= H
 ].
 Qed.
+*)
 
 Lemma mm2Steps_equiv_lm2eSteps: forall s s' : lm2e_state,
-  clos_refl_sym_trans MM2Notations.mm2_state mm2_step (state_encoding s) (state_encoding s') <->
-  clos_refl_sym_trans lm2e_state lm2e_step s s'.
+  clos_refl_trans _ mm2_step (state_encoding s) (state_encoding s') <->
+  clos_refl_trans _ lm2e_step s s'.
 Proof.
-exact: (closRST_R_equiv_R' _ _ mm2_step lm2e_step state_encoding
+exact: (closRT_R_equiv_R' _ _ mm2_step lm2e_step state_encoding
   state_encoding_inj
   mm2Step_equiv_lm2eStep
-  mm2Step_preserves_encoding_right
-  mm2Step_preserves_encoding_left).
+  mm2Step_preserves_encoding_right).
 Qed.
+
+End LM2EReductionNe0.
+End LM2EReductionNe0.
+
+Module LM2EReductionEq0.
+Section LM2EReductionEq0.
+
+Variable P: MM2_PROBLEM.
+Let M := P.1.1.
+Let initial_a := P.1.2.
+Let initial_b := P.2.
+
+Definition M'_instructions: seq (lm2e_instr 0) := nil.
+
+Lemma M'_machine_length : size M'_instructions == 0.
+Proof. done. Qed.
+
+Definition M': lm2e_machine 0 := {|
+  einstructions := M'_instructions;
+  emachine_length := M'_machine_length;
+|}.
+
+Let lm2e_step := (lm2e_step M').
+Let mm2_step := (mm2_step M).
+
+Definition reduction_output : Lm2eHaltsArguments := {|
+  lm2e_halts_arguments_n := 0;
+  lm2e_halts_arguments_M := M';
+  lm2e_halts_arguments_x := initial_a;
+  lm2e_halts_arguments_y := initial_b;
+|}.
+
+Lemma mm2_empty_non_steps:
+  size M = 0 -> ~ clos_refl_trans _ mm2_step (1, (initial_a, initial_b)) (0, (0, 0)).
+Admitted.
+
+Lemma lm2e_empty_non_steps:
+  ~ clos_refl_trans _ lm2e_step (lm2e_initial_state 0 initial_a initial_b) (lm2e_ending_state 0).
+Admitted.
+
+End LM2EReductionEq0.
+End LM2EReductionEq0.
+
+Module LM2EReduction.
+Section LM2EReduction.
+
+Variable P: MM2_PROBLEM.
+Let M := P.1.1.
+Let initial_a := P.1.2.
+Let initial_b := P.2.
+
+Definition reduction_output : Lm2eHaltsArguments.
+Proof.
+case: (size M) => [|_].
+  exact: LM2EReductionEq0.reduction_output P.
+exact: LM2EReductionNe0.reduction_output P.
+Defined.
 
 End LM2EReduction.
 End LM2EReduction.
@@ -623,15 +694,41 @@ Lemma LM2E_HALTS_reduction : MM2_HALTS_ON_ZERO ⪯ LM2E_HALTS_uncurried.
 Proof.
 exists LM2EReduction.reduction_output => [[[M x] y]].
 split.
-- rewrite /MM2_HALTS_ON_ZERO /=.
+- rewrite /LM2EReduction.reduction_output/=.
+  set n' := size M.
+  have: size M = n' by done.
+  case: n' => [H H'|n' H].
+    have := @LM2EReductionEq0.mm2_empty_non_steps (M, x, y) H H'.
+    done.
   rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
-  move=> H.
-  have := @LM2EReduction.mm2Steps_equiv_lm2eSteps (M, x, y)
-    (lm2e_initial_state (LM2EReduction.ne0 (M, x, y)) x y)
-    (lm2e_ending_state (LM2EReduction.n (M, x, y))).
-  move=> <-.
-
-Admitted.
+  rewrite -LM2EReductionNe0.mm2Steps_equiv_lm2eSteps /=; last first.
+    by rewrite /LM2EReductionNe0.n/=; lia.
+  have -> //: LM2EReductionNe0.state_encoding (lm2e_initial_state (LM2EReductionNe0.n (M, x, y)) x y) = (1, (x, y)).
+  have {}H: n'.+1 = size M by rewrite H.
+  have -> //: lm2e_initial_state (size M) x y = (lm2e_addr_instr (cast_ord H ord0), (x, y)).
+  destruct H.
+  rewrite cast_ord_id /=.
+  have -> //: @Ordinal (S n') O erefl = ord0.
+  by apply /eqP.
+- rewrite /LM2EReduction.reduction_output/=.
+  set n' := size M.
+  have: size M = n' by done.
+  case: n' => [H|n' H].
+    rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
+    have := @LM2EReductionEq0.lm2e_empty_non_steps (M, x, y).
+    done.
+  rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
+  rewrite -LM2EReductionNe0.mm2Steps_equiv_lm2eSteps /=; last first.
+    by rewrite /LM2EReductionNe0.n/=; lia.
+  have -> //: LM2EReductionNe0.state_encoding (lm2e_initial_state (LM2EReductionNe0.n (M, x, y)) x y) = (1, (x, y)).
+  rewrite /LM2EReductionNe0.n/=.
+  have {}H: n'.+1 = size M by rewrite H.
+  have -> //: lm2e_initial_state (size M) x y = (lm2e_addr_instr (cast_ord H ord0), (x, y)).
+  destruct H.
+  rewrite cast_ord_id /=.
+  have -> //: @Ordinal (S n') O erefl = ord0.
+  by apply /eqP.
+Qed.
 
 Lemma LM2E_HALTS_undec : undecidable LM2E_HALTS_uncurried.
 apply: (undecidability_from_reducibility MM2_HALTS_ON_ZERO_undec).
@@ -717,7 +814,7 @@ apply: pair.
   apply: lm2_addr_instr.
   by exists 0.
 exact: (x, y).
-Qed.
+Defined.
 
 Definition lm2_ending_state: lm2_state := (lm2_addr_stop, (0, 0)).
 
@@ -741,24 +838,40 @@ Definition LM2_HALTS_uncurried (args: Lm2HaltsArguments) :=
 Module LM2Reduction.
 Section LM2Reduction.
 
-Variable n: nat.
-Variable M: lm2e_machine n.
-Variable a b: nat.
+Variable args: Lm2eHaltsArguments.
 
-Notation lm2_addr := (lm2_addr n).
-Notation lm2_state := (lm2_state n).
+Let n := lm2e_halts_arguments_n args.
+Let M := lm2e_halts_arguments_M args.
+Let a := lm2e_halts_arguments_x args.
+Let b := lm2e_halts_arguments_y args.
+
+Let n_encoded := n.+1.
+
+Lemma n_encoded_wider: n <= n_encoded.
+Proof. lia. Qed.
+
+Lemma n_encoded_pos: n_encoded > 0.
+Proof. by rewrite /n_encoded. Defined.
+
+Notation lm2_addr := (lm2_addr n_encoded).
+Notation lm2_state := (lm2_state n_encoded).
 Notation lm2e_addr := (lm2e_addr n).
 Notation lm2e_instr := (lm2e_instr n).
+Notation lm2e_state := (lm2e_state n).
+
+Definition ord_n: 'I_(n_encoded).
+Proof. by exists n; lia. Defined.
+
+Definition lm2_boom_encoding: lm2_addr.
+Proof.
+apply lm2_addr_instr.
+exact: ord_n.
+Defined.
 
 Definition translate_addr (addr: lm2e_addr) := match addr with
-  | lm2e_addr_stop => lm2_addr_stop n
-  | lm2e_addr_instr i => lm2_addr_instr i
-  | lm2e_addr_boom _ => lm2_addr_stop n (* doesn't matter *)
-  end.
-
-Definition translate_addr' (addr: lm2_addr) := match addr with
-  | lm2_addr_stop => lm2e_addr_stop n
-  | lm2_addr_instr i => lm2e_addr_instr i
+  | lm2e_addr_stop => lm2_addr_stop _
+  | lm2e_addr_instr i => lm2_addr_instr (widen_ord n_encoded_wider i)
+  | lm2e_addr_boom i => lm2_boom_encoding
   end.
 
 Definition translate_instruction (instr: lm2e_instr) := match instr with
@@ -768,12 +881,16 @@ Definition translate_instruction (instr: lm2e_instr) := match instr with
   | lm2e_dec_y i j => lm2_dec_y (translate_addr i) (translate_addr j)
   end.
 
-Definition M'_instructions := [seq translate_instruction instr | instr <- (einstructions M) ].
+Definition M'_instructions := [seq translate_instruction instr | instr <- (einstructions M) ]
+  ++ [:: lm2_inc_x lm2_boom_encoding ].
 
-Lemma M'_machine_length : size M'_instructions == n.
-Proof. rewrite /M'_instructions size_map; exact: emachine_length. Qed.
+Lemma M'_machine_length : size M'_instructions == n_encoded.
+Proof. rewrite /M'_instructions size_cat size_map /=.
+have /eqP -> := emachine_length M.
+lia.
+Qed.
 
-Definition M': lm2_machine n := {|
+Definition M': lm2_machine n_encoded := {|
   instructions := M'_instructions;
   machine_length := M'_machine_length;
 |}.
@@ -781,219 +898,263 @@ Definition M': lm2_machine n := {|
 Let lm2_step := (lm2_step M').
 Let lm2e_step := (lm2e_step M).
 
-Definition state_encoding (s: lm2_state) :=
-  let '(i, (a, b)) := s in (translate_addr' i, (a, b)).
-
-Lemma translate_addrK j: translate_addr (translate_addr' j) = j.
-Proof. by case: j. Qed.
+Definition state_encoding (s: lm2e_state) :=
+  let '(i, (a, b)) := s in (translate_addr i, (a, b)).
 
 Lemma lm2eStep_to_lm2Step : forall s s',
-  lm2e_step (state_encoding s) (state_encoding s')
+  lm2e_step s s'
     ->
-  lm2_step s s'.
+  lm2_step (state_encoding s) (state_encoding s').
 Proof.
 move=> [i [x y]] [i' [x' y']].
 rewrite /lm2e_step/LM2.lm2e_step/=.
-case: i => //= i.
-set instr := lm2e_instr_at M i.
-have: instr = lm2e_instr_at M i by done.
-case: instr => [
-  j Hinstr /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /= |
-  j Hinstr /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /= |
-  j l Hinstr |
-  j l Hinstr
-].
-- case: i' => [|i'].
-    move: Hinstr => /[swap] /eqP <-.
-    rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-      by rewrite (eqP (emachine_length M)) ltn_ord.
-    rewrite /lm2e_instr_at => <- /=.
-    by rewrite !eq_refl.
-  move: Hinstr => /[swap] /eqP <-.
-  rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-    by rewrite (eqP (emachine_length M)) ltn_ord.
-  rewrite /lm2e_instr_at => <- /=.
-  by rewrite !eq_refl.
-- case: i' => [|i'].
-    move: Hinstr => /[swap] /eqP <-.
-    rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-      by rewrite (eqP (emachine_length M)) ltn_ord.
-    rewrite /lm2e_instr_at => <- /=.
-    by rewrite !eq_refl.
-  move: Hinstr => /[swap] /eqP <-.
-  rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-    by rewrite (eqP (emachine_length M)) ltn_ord.
-  rewrite /lm2e_instr_at => <- /=.
-  by rewrite !eq_refl.
-- case: x => [/andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /=|x /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /=].
-    case: i' => [|i'].
-      move: Hinstr => /[swap] /eqP <-.
-      rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-        by rewrite (eqP (emachine_length M)) ltn_ord.
-      rewrite /lm2e_instr_at => <- /=.
-      by rewrite !eq_refl.
-    move: Hinstr => /[swap] /eqP <-.
-    rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-      by rewrite (eqP (emachine_length M)) ltn_ord.
-    rewrite /lm2e_instr_at => <- /=.
-    by rewrite !eq_refl.
-  case: i' => [|i'].
-    move: Hinstr => /[swap] /eqP <-.
-    rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-      by rewrite (eqP (emachine_length M)) ltn_ord.
-    rewrite /lm2e_instr_at => <- /=.
-    by rewrite !eq_refl.
-  move: Hinstr => /[swap] /eqP <-.
-  rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-    by rewrite (eqP (emachine_length M)) ltn_ord.
-  rewrite /lm2e_instr_at => <- /=.
-  by rewrite !eq_refl.
-- case: y => [/andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /=|y /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /=].
-    case: i' => [|i'].
-      move: Hinstr => /[swap] /eqP <-.
-      rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-        by rewrite (eqP (emachine_length M)) ltn_ord.
-      rewrite /lm2e_instr_at => <- /=.
-      by rewrite !eq_refl.
-    move: Hinstr => /[swap] /eqP <-.
-    rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-      by rewrite (eqP (emachine_length M)) ltn_ord.
-    rewrite /lm2e_instr_at => <- /=.
-    by rewrite !eq_refl.
-  case: i' => [|i'].
-    move: Hinstr => /[swap] /eqP <-.
-    rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-      by rewrite (eqP (emachine_length M)) ltn_ord.
-    rewrite /lm2e_instr_at => <- /=.
-    by rewrite !eq_refl.
-  move: Hinstr => /[swap] /eqP <-.
-  rewrite /lm2_step/LM2.lm2_step/=/lm2_instr_at/M'/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-    by rewrite (eqP (emachine_length M)) ltn_ord.
-  rewrite /lm2e_instr_at => <- /=.
-  by rewrite !eq_refl.
-Qed.
-
-Lemma lm2Step_to_lm2eStep_nonstop : forall s s',
-  (index s') != lm2_addr_stop _
-    ->
-  lm2_step s s'
-    ->
-  lm2e_step (state_encoding s) (state_encoding s').
-Proof.
-move=> [i [x y]] [i' [x' y']].
 rewrite /lm2_step/LM2.lm2_step/=.
-case: i => // i.
-move=> H'' /[dup] H'.
-set instr := lm2_instr_at M' i.
-have: instr = lm2_instr_at M' i by done.
-rewrite /M'/lm2_instr_at/=/M'_instructions (nth_map (lm2e_dummy_instr n)); last first.
-  by rewrite (eqP (emachine_length M)) ?(ltn_ord i).
-have: instr = lm2_instr_at M' i by done.
-have ->: nth (lm2e_dummy_instr n) M i = lm2e_instr_at M i by done.
-case: instr.
-- move=> j Hinstr' Hinstr /andP [/andP [/eqP -> /eqP ->] /eqP ->] /=.
-  have {H' H''}: j != lm2_addr_stop _.
-    move: H'.
-    rewrite -Hinstr'.
-    by move: H'' => /[swap] /andP [/andP [/eqP -> _] _].
-  rewrite /lm2e_step/LM2.lm2e_step/=.
-  move: Hinstr.
-  case: (lm2e_instr_at M i) => //= j' H.
-  injection H => {H}.
-  case: j' => /= [-> //|j' -> _ /=|j' -> //].
+case: i => //= i.
+rewrite /lm2_instr_at/lm2e_instr_at/=/M'_instructions.
+rewrite nth_cat size_map (eqP (emachine_length M)) (ltn_ord i).
+rewrite (nth_map (lm2e_dummy_instr _)); last first.
+  by rewrite (eqP (emachine_length M)) (ltn_ord i).
+case: (nth (lm2e_dummy_instr n) M i).
+- move=> l /= /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /eqP ->.
   by rewrite !eq_refl.
-- move=> j Hinstr' Hinstr /andP [/andP [/eqP -> /eqP ->] /eqP ->] /=.
-  have {H' H''}: j != lm2_addr_stop _.
-    move: H'.
-    rewrite -Hinstr'.
-    by move: H'' => /[swap] /andP [/andP [/eqP -> _] _].
-  rewrite /lm2e_step/LM2.lm2e_step/=.
-  move: Hinstr.
-  case: (lm2e_instr_at M i) => //= j' H.
-  injection H => {H}.
-  case: j' => /= [-> //|j' -> _ /=|j' -> //].
+- move=> l /= /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /eqP ->.
   by rewrite !eq_refl.
-- move=> j k Hinstr' Hinstr.
-  case: x H' => [H'|x H'].
-    have {H' H''}: j != lm2_addr_stop _.
-      move: H'.
-      rewrite -Hinstr'.
-      by move: H'' => /[swap] /andP [/andP [/eqP -> _] _].
-    move=> /[swap] /andP [/andP [/eqP -> /eqP ->] /eqP ->] /=.
-    rewrite /lm2e_step/LM2.lm2e_step/=.
-    move: Hinstr.
-    case: (lm2e_instr_at M i) => //= j' k' H.
-    injection H => {H}.
-    case: j' => [_ -> //|j' _ -> _|j' _ -> //].
+- move=> l j.
+  case: x => [|x].
+    move=> /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /eqP -> /=.
     by rewrite !eq_refl.
-  have {H' H''}: k != lm2_addr_stop _.
-    move: H'.
-    rewrite -Hinstr'.
-    by move: H'' => /[swap] /andP [/andP [/eqP -> _] _].
-  move=> /[swap] /andP [/andP [/eqP -> /eqP ->] /eqP ->] /=.
-  rewrite /lm2e_step/LM2.lm2e_step/=.
-  move: Hinstr.
-  case: (lm2e_instr_at M i) => //= j' k' H.
-  injection H => {H}.
-  case: k' => [-> _ //|k' -> _ _|k' -> _ //].
+  move=> /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /eqP -> /=.
   by rewrite !eq_refl.
-- move=> j k Hinstr' Hinstr.
-  case: y H' => [H'|y H'].
-    have {H' H''}: j != lm2_addr_stop _.
-      move: H'.
-      rewrite -Hinstr'.
-      by move: H'' => /[swap] /andP [/andP [/eqP -> _] _].
-    move=> /[swap] /andP [/andP [/eqP -> /eqP ->] /eqP ->] /=.
-    rewrite /lm2e_step/LM2.lm2e_step/=.
-    move: Hinstr.
-    case: (lm2e_instr_at M i) => //= j' k' H.
-    injection H => {H}.
-    case: j' => [_ -> //|j' _ -> _|j' _ -> //].
+- move=> l j.
+  case: y => [|y].
+    move=> /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /eqP -> /=.
     by rewrite !eq_refl.
-  have {H' H''}: k != lm2_addr_stop _.
-    move: H'.
-    rewrite -Hinstr'.
-    by move: H'' => /[swap] /andP [/andP [/eqP -> _] _].
-  move=> /[swap] /andP [/andP [/eqP -> /eqP ->] /eqP ->] /=.
-  rewrite /lm2e_step/LM2.lm2e_step/=.
-  move: Hinstr.
-  case: (lm2e_instr_at M i) => //= j' k' H.
-  injection H => {H}.
-  case: k' => [-> _ //|k' -> _ _|k' -> _ //].
+  move=> /andP [/andP []] /[swap] /eqP -> /[swap] /eqP -> /eqP -> /=.
   by rewrite !eq_refl.
 Qed.
-
-Lemma lm2Step_to_lm2eStep_stop : forall s a b,
-  lm2_step s ((lm2_addr_stop _), (a, b))
-    ->
-  lm2e_step (state_encoding s) ((lm2e_addr_stop _), (a, b)).
-Proof.
-Admitted.
 
 Lemma lm2Step_to_lm2eStep : forall s s',
-  lm2_step s s'
+  index (state_encoding s') != lm2_boom_encoding
     ->
-  lm2e_step (state_encoding s) (state_encoding s').
+  lm2_step (state_encoding s) (state_encoding s')
+    ->
+  lm2e_step s s'.
 Proof.
-move=> [i [x y]] [i' [x' y']].
-case: i' => [|i']; do [
-  exact: lm2Step_to_lm2eStep_stop |
-  exact: lm2Step_to_lm2eStep_nonstop
-].
+move=> [i [x y]] [i' [x' y']] /=.
+rewrite /lm2_step/LM2.lm2_step/=.
+rewrite /lm2e_step/LM2.lm2e_step/=.
+rewrite /lm2_instr_at/M'/=/M'_instructions.
+rewrite /lm2e_instr_at/M'/=/M'_instructions.
+case: i => //= i.
+case: i' => [/= _|i' /= _|i']; last by rewrite eq_refl.
+- rewrite nth_cat size_map (eqP (emachine_length M)) (ltn_ord i).
+  rewrite (nth_map (lm2e_dummy_instr _)); last first.
+    by rewrite (eqP (emachine_length M)) (ltn_ord i).
+  case: (nth (lm2e_dummy_instr n) M i) => /=.
+  - by elim=> //=.
+  - by elim=> //=.
+  - case: x => [|x _].
+      by elim=> //=.
+    by elim=> //=.
+  - case: y => [|y _].
+      by elim=> //=.
+    by elim=> //=.
+- rewrite nth_cat size_map (eqP (emachine_length M)) (ltn_ord i).
+  rewrite (nth_map (lm2e_dummy_instr _)); last first.
+    by rewrite (eqP (emachine_length M)) (ltn_ord i).
+  case: (nth (lm2e_dummy_instr n) M i) => /=.
+  - elim=> //= _.
+    rewrite /lm2_boom_encoding => /andP [/andP []] /eqP H.
+    injection H => {}H.
+    have := ltn_ord i'.
+    by rewrite H; lia.
+  - elim=> //= _.
+    rewrite /lm2_boom_encoding => /andP [/andP []] /eqP H.
+    injection H => {}H.
+    have := ltn_ord i'.
+    by rewrite H; lia.
+  - case: x => [|x _].
+    - elim=> //= _ _.
+      rewrite /lm2_boom_encoding => /andP [/andP []] /eqP H.
+      injection H => {}H.
+      have := ltn_ord i'.
+      by rewrite H; lia.
+    elim=> //= _.
+    rewrite /lm2_boom_encoding => /andP [/andP []] /eqP H.
+    injection H => {}H.
+    have := ltn_ord i'.
+    by rewrite H; lia.
+  - case: y => [|y _].
+    - elim=> //= _ _.
+      rewrite /lm2_boom_encoding => /andP [/andP []] /eqP H.
+      injection H => {}H.
+      have := ltn_ord i'.
+      by rewrite H; lia.
+    elim=> //= _.
+    rewrite /lm2_boom_encoding => /andP [/andP []] /eqP H.
+    injection H => {}H.
+    have := ltn_ord i'.
+    by rewrite H; lia.
+- rewrite nth_cat size_map (eqP (emachine_length M)).
+  have /negbTE -> : ~~ (n < n) by lia.
+  have -> /=: n - n = 0 by lia.
+  by move=> /[swap] /andP [/andP []] ->.
 Qed.
 
+Lemma lm2eSteps_to_lm2Steps : forall s s',
+  clos_refl_trans _ lm2e_step s s'
+    ->
+  clos_refl_trans _ lm2_step (state_encoding s) (state_encoding s').
+Proof.
+move=> s s' H; dependent induction H.
+- exact /rt_step /lm2eStep_to_lm2Step.
+- exact /rt_refl.
+- exact /(rt_trans _ _ _ (state_encoding y)).
+Qed.
+
+Lemma translate_addr_injective: forall i i',
+  translate_addr i' != lm2_boom_encoding ->
+  translate_addr i = translate_addr i' -> i = i'.
+Proof.
+elim=> [|i|i].
+- by elim=> //.
+- elim=> //= j _ H; injection H => /eqP.
+    by rewrite (inj_eq (@ord_inj n)) => /eqP ->.
+  by have := ltn_ord i; lia.
+- elim=> //= j H' H.
+    injection H.
+    by have := ltn_ord j; lia.
+  move: H'.
+  by rewrite eq_refl.
+Qed.
+
+Lemma state_encoding_injective: forall s s',
+  index (state_encoding s') != lm2_boom_encoding
+    ->
+  state_encoding s = state_encoding s' -> s = s'.
+Proof.
+move=> [i [x y]] [i' [x' y']] /=.
+move=> H' [].
+by elim: i => [|i|i]; move=> /(translate_addr_injective H') {H'} -> -> ->.
+Qed.
+
+Lemma lm2Step_preserve_encoding: forall (s : lm2e_state) (x' : lm2_state),
+  lm2_step (state_encoding s) x' -> exists s' : lm2e_state, state_encoding s' = x'.
+Proof.
+move=> [i [x y]] x'.
+rewrite /lm2_step/LM2.lm2_step/=.
+case: i => //= i; last first.
+  rewrite /lm2_instr_at/=/M'_instructions/=.
+  rewrite nth_cat size_map (eqP (emachine_length M)).
+  have /negbTE ->: ~~ (n < n) by lia.
+  have -> /=: (n - n = 0) by lia.
+  move=> /andP [/andP [/eqP H1 /eqP H2] /eqP H3].
+  exists (lm2e_addr_boom _ 0, (x.+1, y)).
+  rewrite /state_encoding -{}H2 -{}H3 /= -{}H1.
+  by case: x' => ? [? ?] /=.
+rewrite /lm2_instr_at/=/M'_instructions/=.
+rewrite nth_cat size_map (eqP (emachine_length M)) (ltn_ord _).
+rewrite (nth_map (lm2e_dummy_instr _)); last first.
+  by rewrite (eqP (emachine_length M)) (ltn_ord _).
+case: (nth (lm2e_dummy_instr _) M i) => /=.
+- move=> j /andP [/andP [/eqP H1 /eqP H2] /eqP H3].
+  exists (j, (x.+1, y)).
+  rewrite /state_encoding -{}H1 -{}H2 -{}H3.
+  by case: x' => ? [? ?] /=.
+- move=> j /andP [/andP [/eqP H1 /eqP H2] /eqP H3].
+  exists (j, (x, y.+1)).
+  rewrite /state_encoding -{}H1 -{}H2 -{}H3.
+  by case: x' => ? [? ?] /=.
+- case: x => [|x].
+    move=> j l /andP [/andP [/eqP H1 /eqP H2] /eqP H3].
+    exists (j, (0, y)).
+    rewrite /state_encoding -{}H1 -{}H2 -{}H3.
+    by case: x' => ? [? ?] /=.
+  move=> j l /andP [/andP [/eqP H1 /eqP H2] /eqP H3].
+  exists (l, (x, y)).
+  rewrite /state_encoding -{}H1 -{}H2 -{}H3.
+  by case: x' => ? [? ?] /=.
+- case: y => [|y].
+    move=> j l /andP [/andP [/eqP H1 /eqP H2] /eqP H3].
+    exists (j, (x, 0)).
+    rewrite /state_encoding -{}H1 -{}H2 -{}H3.
+    by case: x' => ? [? ?] /=.
+  move=> j l /andP [/andP [/eqP H1 /eqP H2] /eqP H3].
+  exists (l, (x, y)).
+  rewrite /state_encoding -{}H1 -{}H2 -{}H3.
+  by case: x' => ? [? ?] /=.
+Qed.
+
+Lemma lm2Step_backpropagates: forall x y : lm2_state,
+  index y != lm2_boom_encoding -> lm2_step x y -> index x != lm2_boom_encoding.
+Proof.
+move=> [i [x y]] [i' [x' y']] /=.
+rewrite /lm2_step/LM2.lm2_step/=.
+case: i => i //.
+rewrite /M'/lm2_instr_at/=/M'_instructions.
+rewrite nth_cat size_map (eqP (emachine_length M)).
+have /orP [/= /eqP ->|] := orbN (\val i == n).
+  have /negbTE ->: ~~(n < n) by lia.
+  have -> /=: n - n = 0 by lia.
+  lia.
+do 2 ! move=> /[swap] _.
+apply /contra => /eqP H.
+by injection H => ->.
+Qed.
+
+Lemma lm2Steps_to_lm2eSteps : forall s s',
+  index (state_encoding s') != lm2_boom_encoding
+    ->
+  clos_refl_trans _ lm2_step (state_encoding s) (state_encoding s')
+    ->
+  clos_refl_trans _ lm2e_step s s'.
+Proof.
+apply: (clos_rt_impl_with_cond _ _ (fun x => index x != lm2_boom_encoding)).
+- exact: state_encoding_injective.
+- exact: lm2Step_to_lm2eStep.
+- exact: lm2Step_preserve_encoding.
+- exact: lm2Step_backpropagates.
+Qed.
+
+Definition reduction_output: Lm2HaltsArguments := {|
+  lm2_halts_arguments_n := n_encoded;
+  lm2_halts_arguments_M := M';
+  lm2_halts_arguments_ne0 := n_encoded_pos;
+  lm2_halts_arguments_x := a;
+  lm2_halts_arguments_y := b;
+|}.
+
 End LM2Reduction.
 End LM2Reduction.
 
-Lemma LM2_HALTS_reduction : MM2_HALTS_ON_ZERO ⪯ LM2_HALTS_uncurried.
+Lemma cool x:
+  LM2Reduction.state_encoding (lm2e_initial_state (lm2e_halts_arguments_n x) (lm2e_halts_arguments_x x) (lm2e_halts_arguments_y x))
+   =  
+  lm2_initial_state (LM2Reduction.n_encoded_pos x) (lm2e_halts_arguments_x x) (lm2e_halts_arguments_y x).
 Proof.
-exists LM2Reduction.reduction_output => [[[M x] y]].
-split.
-- rewrite /MM2_HALTS_ON_ZERO /=.
-  rewrite /LM2_HALTS_uncurried /LM2_HALTS /=.
+rewrite /lm2e_initial_state.
+(* faux !! *)
 Admitted.
 
+Lemma LM2_HALTS_reduction : LM2E_HALTS_uncurried ⪯ LM2_HALTS_uncurried.
+Proof.
+exists LM2Reduction.reduction_output => [x]; split.
+- rewrite /LM2_HALTS_uncurried /LM2_HALTS /=.
+  rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
+  move=> H.
+  have /= := @LM2Reduction.lm2eSteps_to_lm2Steps x (lm2e_initial_state _ _ _) (lm2e_ending_state _) H.
+  rewrite /lm2_ending_state/=.
+  by rewrite cool.
+- rewrite /LM2_HALTS_uncurried /LM2_HALTS /=.
+  rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
+  move=> H.
+  have := @LM2Reduction.lm2Steps_to_lm2eSteps x (lm2e_initial_state _ _ _) (lm2e_ending_state _) isT.
+  apply.
+  move: H.
+  by rewrite cool.
+Qed.
+
 Lemma LM2_HALTS_undec : undecidable LM2_HALTS_uncurried.
-apply: (undecidability_from_reducibility MM2_HALTS_ON_ZERO_undec).
+apply: (undecidability_from_reducibility LM2E_HALTS_undec).
 exact: LM2_HALTS_reduction.
 Qed.
