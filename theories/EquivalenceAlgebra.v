@@ -490,10 +490,10 @@ Proof.
 move=> x y [decomp_x [decomp_x_gens x_eq]] [decomp_y [decomp_y_gens y_eq]].
 exists (decomp_x ++ decomp_y); split; first by rewrite List.Forall_app; split.
 by rewrite prod_cat x_eq y_eq.
-Qed.
+Defined.
 
 Lemma igs_P_neutral: in_generated_subgroup e.
-Proof. exists nil; split=> //. Qed.
+Proof. exists nil; split=> //. Defined.
 
 Lemma revE: forall {A} (l: seq A), rev l = List.rev l.
 Proof. by move=> A; elim=> [//|a l /=]; rewrite -cat1s rev_cat => ->. Qed.
@@ -511,7 +511,7 @@ move: decomp_x_gens; rewrite List.Forall_map.
 apply /List.Forall_impl => g.
 apply /List.Exists_impl => g' [] eq; first by right; rewrite eq.
 by left; rewrite -[g']inv_involutive eq.
-Qed.
+Defined.
 
 HB.instance Definition _ := isSubgroupCharacterizer.Build G in_generated_subgroup igs_P_law igs_P_neutral igs_P_inv.
 
