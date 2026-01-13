@@ -11,14 +11,127 @@ From Stdlib.Program Require Import Equality.
 From GWP Require Import ReductionUtils.
 
 Record MM2_NON_NULL_HALTS_ON_ZERO_arguments := {
-  mm2nnhoz_problem: MM2_PROBLEM;
+  mm2nnhoz_problem :> MM2_PROBLEM;
   mm2nnhoz_ne0: size mm2nnhoz_problem.1.1 > 0;
 }.
 Definition MM2_NON_NULL_HALTS_ON_ZERO := fun (args: MM2_NON_NULL_HALTS_ON_ZERO_arguments) =>
   MM2_HALTS_ON_ZERO (mm2nnhoz_problem args).
 
-Lemma MM2_NON_NULL_HALTS_ON_ZERO_undec: undecidable MM2_NON_NULL_HALTS_ON_ZERO.
+Module MM2NNReduction.
+Section MM2NNReduction.
+
+Variable P: MM2_PROBLEM.
+Let M := P.1.1.
+
+Definition M' := M ++ [:: mm2_inc_a].
+
+Lemma M'_non_nil: size M' > 0.
+Proof. rewrite size_cat /=; lia. Qed.
+
+Definition reduction_output := {|
+  mm2nnhoz_problem := (M', P.1.2, P.2);
+  mm2nnhoz_ne0 := M'_non_nil;
+|}.
+
+Lemma step_forward x y:
+  (mm2_step M) x y -> (mm2_step M') x y.
+Proof.
+rewrite /mm2_step; case=> instr [[l1 [l2 [H1 H2]]] ?].
+exists instr; split=> //.
+rewrite /M'.
+exists l1; exists (l2 ++ [:: mm2_inc_a]).
+rewrite H1 -catA; split=> //.
+Qed.
+
+Lemma sizeE {T: Type} (l: seq T): size l = length l.
+Proof. elim: l => //. Qed.
+
+Lemma step_backward x y:
+  MM2Notations.index y <= size M ->
+  (mm2_step M') x y -> (mm2_step M) x y.
+Proof.
+(*
+move=> Hy.
+rewrite /mm2_step; case=> instr [instr_at instr_step].
+have /orP [H|H1] := orbN (MM2Notations.index x <= size M).
+  exists instr; split=> //.
+  move: instr_at; case=> l1 [l2] [] H'.
+  have H1: size M' = size l1 + size l2 + 1.
+    by rewrite H' size_cat /=; lia.
+  have H2: size M' = size M + 1.
+    by rewrite /M' size_cat.
+  have {H1 H2}H1: size M = size l1 + size l2 by lia.
+  move: H => /[swap] <-.
+  rewrite H1 -sizeE -addnE => H.
+  have {}H: size l2 > 0 by lia.
+  exists l1.
+  exists (take (size l2 - 1) l2); split=> //.
+  move: H'.
+  rewrite /M' -{1}(cat_take_drop (size l2 - 1) l2) => H'.
+  admit.
+move: (instr_at) => /mm2_instr_at_bounds [_].
+rewrite -sizeE /M' size_cat /= => H2.
+have {H1 H2}Hindex: MM2Notations.index x = size M + 1 by lia.
+move: instr_at (Hindex) => /[swap] -> [l1 [l2 [H1 H2]]].
+have: size M' = (size l1) + 1 + (size l2).
+  by rewrite H1 size_cat /=; lia.
+rewrite /M' size_cat /= -H2 -addnE -sizeE => H.
+have {H} /size0nil H: size l2 = 0 by lia.
+have {H H1}: M' = rcons l1 instr.
+  by rewrite H1 H -cats1.
+rewrite /M' cats1.
+move=> /rcons_inj; case=> _ H.
+move: instr_step; rewrite -{H2}H.
+move=> H'; dependent induction H'.
+Print mm2_atom.
+*)
+(*
+have
+have H3: size M' = (size M).+1.
+  by rewrite /M' size_cat /=; lia.
+have {}H1: size M' = (size l1) + (size l2) + 1.
+  by rewrite H1 size_cat /=; lia.
+have {H1 H3} H3: size M = size l1 + size l2 by lia.
+rewrite H3.
+have {}H2: MM2Notations.index x = size l1 + 1 by rewrite -H2 -addnE sizeE addnC.
+move=> H1.
+have {}H1: MM2Notations.index x > size l1 + size l2 by lia.
+have: MM2Notations.index x = size M.
+move: H1; rewrite {}H2.
+rewrite H3.
+
+rewrite -H2.
+
+rewrite /M'.
+
+rewrite -H2 H1 size_cat /=.
+rewrite sizeE.
+have: size l2 = 0.
+have: size M = MM2Notations.index x.
+  mo
+
+move: H2 H1.
+
+exists instr; split=> //.
+rewrite /M'.
+exists l1; exists (l2 ++ [:: mm2_inc_a]).
+rewrite H1 -catA; split=> //.
+*)
 Admitted.
+
+End MM2NNReduction.
+End MM2NNReduction.
+
+Lemma MM2_NON_NULL_HALTS_ON_ZERO_reduction: MM2_HALTS_ON_ZERO ⪯ MM2_NON_NULL_HALTS_ON_ZERO.
+Proof.
+exists MM2NNReduction.reduction_output => [P]; split.
+Admitted.
+
+Lemma MM2_NON_NULL_HALTS_ON_ZERO_undec: undecidable MM2_NON_NULL_HALTS_ON_ZERO.
+Proof.
+apply: (undecidability_from_reducibility MM2_HALTS_ON_ZERO_undec).
+exact: MM2_NON_NULL_HALTS_ON_ZERO_reduction.
+Qed.
 
 
 
@@ -212,9 +325,6 @@ Qed.
 
 Lemma jump_target_address_normal i: i <= n -> address_encoding (jump_target_address i) = i.
 Proof. by case: i => //= i H; rewrite insubT /=. Qed.
-
-Lemma sizeE {T: Type} (l: seq T): size l = length l.
-Proof. elim: l => //. Qed.
 
 Lemma mm_instr_at_nth (pos: 'I_n): mm2_instr_at (nth mm2_inc_a M pos) pos.+1 M.
 Proof.
