@@ -10,9 +10,26 @@ From Stdlib.Program Require Import Equality.
 
 From GWP Require Import ReductionUtils.
 
+Record MM2_NON_NULL_HALTS_ON_ZERO_arguments := {
+  mm2nnhoz_problem: MM2_PROBLEM;
+  mm2nnhoz_ne0: size mm2nnhoz_problem.1.1 > 0;
+}.
+Definition MM2_NON_NULL_HALTS_ON_ZERO := fun (args: MM2_NON_NULL_HALTS_ON_ZERO_arguments) =>
+  MM2_HALTS_ON_ZERO (mm2nnhoz_problem args).
+
+Lemma MM2_NON_NULL_HALTS_ON_ZERO_undec: undecidable MM2_NON_NULL_HALTS_ON_ZERO.
+Admitted.
+
+
+
+
+
+
+
 Section LM2E_exploding.
 (* Number of instructions in the machine. *)
 Variable n: nat.
+Hypothesis ne0: n > 0.
 
 (* Instruction addresses, 0 = "program end" *)
 Inductive lm2e_addr : Type :=
@@ -74,35 +91,12 @@ Definition lm2e_step (s s': lm2e_state) := if e_index s is lm2e_addr_instr pos t
     end
   ) else False (* machine is stopped *).
 
-Definition lm2e_initial_state := fun x y : nat =>
-  let n' := n in
-  (fun a f => f a) erefl
-    ((fun (evar_0_ : (fun n0 : nat => n = n0 -> lm2e_state) 0)
-        (evar_0_0 : forall n0 : nat, (fun n1 : nat => n = n1 -> lm2e_state) n0.+1) =>
-      match n' as n0 return ((fun n1 : nat => n = n1 -> lm2e_state) n0) with
-      | 0 => evar_0_
-      | n.+1 => evar_0_0 n
-      end) (fun=> (lm2e_addr_stop, (x, y)))
-      (fun (n'0 : nat) (Hn : n = n'0.+1) =>
-        (lm2e_addr_instr
-          (Ordinal
-              ((fun evar_0_ : 0 < n'0.+1 =>
-                eq_ind_r (fun pattern_value_ : nat => 0 < pattern_value_) evar_0_ Hn) erefl)),
-        (x, y)))).
-(* TODO: The definition above was obtained by replacing `ssr_have_upoly` lambda-term of 
-   the definition below by a transparent equivalent.
-
 Definition lm2e_initial_state (x y: nat) : lm2e_state.
 Proof.
-set n' := n.
-have: n = n' by done.
-case: n' => [Hn|n' Hn].
-  exact: (lm2e_addr_stop, (x, y)).
 refine ((lm2e_addr_instr _), (x, y)).
 exists 0.
-by rewrite Hn.
+exact: ne0.
 Defined.
-*)
 
 Definition lm2e_ending_state: lm2e_state := (lm2e_addr_stop, (0, 0)).
 
@@ -115,15 +109,16 @@ Arguments e_value_y _ _ /.
 
 Record Lm2eHaltsArguments := {
   lm2e_halts_arguments_n: nat;
+  lm2e_halts_arguments_ne0: (lm2e_halts_arguments_n > 0)%B;
   lm2e_halts_arguments_M: lm2e_machine lm2e_halts_arguments_n;
   lm2e_halts_arguments_x: nat;
   lm2e_halts_arguments_y: nat;
 }.
 Definition LM2E_HALTS_uncurried (args: Lm2eHaltsArguments) :=
-  LM2E_HALTS (lm2e_halts_arguments_M args) (lm2e_halts_arguments_x args) (lm2e_halts_arguments_y args).
+  LM2E_HALTS (lm2e_halts_arguments_ne0 args) (lm2e_halts_arguments_M args) (lm2e_halts_arguments_x args) (lm2e_halts_arguments_y args).
 
-Module LM2EReductionNe0.
-Section LM2EReductionNe0.
+Module LM2EReduction.
+Section LM2EReduction.
 
 Variable P: MM2_PROBLEM.
 Let M := P.1.1.
@@ -171,6 +166,7 @@ Let lm2e_step := (lm2e_step M').
 
 Definition reduction_output : Lm2eHaltsArguments := {|
   lm2e_halts_arguments_n := n;
+  lm2e_halts_arguments_ne0 := ne0;
   lm2e_halts_arguments_M := M';
   lm2e_halts_arguments_x := initial_a;
   lm2e_halts_arguments_y := initial_b;
@@ -230,7 +226,15 @@ rewrite -{1}(cat_take_drop 1 (drop pos M)) drop_drop.
 have ->: 1 + pos = pos.+1 by lia.
 rewrite -cat1s.
 have -> //: take 1 (drop pos M) = [:: nth mm2_inc_a M pos].
-Admitted.
+rewrite take_drop -(map_nth_iota0 mm2_inc_a _); last first.
+  have := ltn_ord pos.
+  rewrite /n.
+  lia.
+rewrite addnC iotaD map_cat.
+rewrite drop_size_cat /=.
+  by rewrite add0n.
+by rewrite size_map size_iota.
+Qed.
 
 Lemma lm2eStep_to_mm2Step : forall s s',
   lm2e_step s s'
@@ -260,11 +264,16 @@ case: instr => [
   rewrite /state_encoding/=.
   rewrite /fallback_target_address.
   have /orP [/[dup] {}H -> /=|/[dup] {}H /negbTE -> /=] := orbN (\val (ordS i) == 0).
-    case: i H => /= i ? ?.
-    have ->: i.+1 = n by admit.
-    by constructor.
+    case: i H => /= i ? H.
+    have /orP [/eqP ->|?] := orbN (i.+1 == n).
+      by constructor.
+    move: H.
+    by rewrite modn_small; lia.
   rewrite modn_small; first constructor.
-  admit.
+  move: H => /=.
+  have /orP [/eqP ->|? _] := orbN (i.+1 == n).
+    by rewrite modnn.
+  by have := ltn_ord i; lia.
 - exists mm2_inc_b => /=.
   move: H.
   rewrite /M'/lm2e_instr_at/=/M'_instructions/=.
@@ -279,11 +288,16 @@ case: instr => [
   rewrite /state_encoding/=.
   rewrite /fallback_target_address.
   have /orP [/[dup] {}H -> /=|/[dup] {}H /negbTE -> /=] := orbN (\val (ordS i) == 0).
-    case: i H => /= i ? ?.
-    have ->: i.+1 = n by admit.
-    by constructor.
+    case: i H => /= i ? H.
+    have /orP [/eqP ->|?] := orbN (i.+1 == n).
+      by constructor.
+    move: H.
+    by rewrite modn_small; lia.
   rewrite modn_small; first constructor.
-  admit.
+  move: H => /=.
+  have /orP [/eqP ->|? _] := orbN (i.+1 == n).
+    by rewrite modnn.
+  by have := ltn_ord i; lia.
 - move: H.
   rewrite /M'/lm2e_instr_at/=/M'_instructions/=.
   rewrite (nth_map ord0) /=; last first.
@@ -299,11 +313,16 @@ case: instr => [
     injection H => {H} {Hinstr} _ ->.
     rewrite /state_encoding/= /fallback_target_address.
     have /orP [/[dup] {}H -> /=|/[dup] {}H /negbTE -> /=] := orbN (\val (ordS i) == 0).
-      case: i H => /= i ? ?.
-      have ->: i.+1 = n by admit.
-      by constructor.
+      case: i H => /= i ? H.
+      have /orP [/eqP ->|?] := orbN (i.+1 == n).
+        by constructor.
+      move: H.
+      by rewrite modn_small; lia.
     rewrite modn_small; first constructor.
-    admit.
+    move: H => /=.
+    have /orP [/eqP ->|? _] := orbN (i.+1 == n).
+      by rewrite modnn.
+    by have := ltn_ord i; lia.
   injection H => {H} -> _.
   case: l Hinstr => [Hinstr /=|l Hinstr /=].
     exists (mm2_dec_a 0); split.
@@ -338,11 +357,16 @@ case: instr => [
     injection H => {H} {Hinstr} _ ->.
     rewrite /state_encoding/= /fallback_target_address.
     have /orP [/[dup] {}H -> /=|/[dup] {}H /negbTE -> /=] := orbN (\val (ordS i) == 0).
-      case: i H => /= i ? ?.
-      have ->: i.+1 = n by admit.
-      by constructor.
+      case: i H => /= i ? H.
+      have /orP [/eqP ->|?] := orbN (i.+1 == n).
+        by constructor.
+      move: H.
+      by rewrite modn_small; lia.
     rewrite modn_small; first constructor.
-    admit.
+    move: H => /=.
+    have /orP [/eqP ->|? _] := orbN (i.+1 == n).
+      by rewrite modnn.
+    by have := ltn_ord i; lia.
   injection H => {H} -> _.
   case: l Hinstr => [Hinstr /=|l Hinstr /=].
     exists (mm2_dec_b 0); split.
@@ -362,7 +386,7 @@ case: instr => [
   rewrite /state_encoding/=.
   have ->: l.+1 - n.+1 + n.+1 = l.+1 by lia.
   by constructor.
-Admitted.
+Qed.
 
 Lemma lm2eInstrAt_when_mm2InstrAt instr (pos: 'I_n) :
   mm2_instr_at instr pos.+1 M ->
@@ -580,46 +604,6 @@ elim: instr => /= [| |l|l]; elim; do [
 ].
 Qed.
 
-(*
-Lemma mm2Step_preserves_encoding_left: forall x s',
-    mm2_step x (state_encoding s') -> exists s, state_encoding s = x.
-Proof.
-move=> [i [a b]] [i' [a' b']].
-case=> [instr [_]].
-elim: instr => /= [| |l|l]; elim; do [
-  move=> i'' a'' b'' /=;
-  case: (inv_addr_encoding i'') => j H;
-  exists (j, (a'', b''));
-  by rewrite /state_encoding/= H
-    |
-  move=> i'' a'' b'' /=;
-  case: (inv_addr_encoding i'') => j H;
-  exists (j, (a'', b''));
-  by rewrite /state_encoding/= H
-    |
-  move=> i'' _ a'' b'' /=;
-  case: (inv_addr_encoding i'') => j H;
-  exists (j, (a''.+1, b''));
-  by rewrite /state_encoding/= H
-    |
-  move=> i'' _ a'' b'' /=;
-  case: (inv_addr_encoding i'') => j H;
-  exists (j, (a'', b''.+1));
-  by rewrite /state_encoding/= H
-    |
-  move=> k _ b'' /=;
-  case: (inv_addr_encoding k) => j H;
-  exists (j, (0, b''));
-  by rewrite /state_encoding/= H
-    |
-  move=> k _ a'' /=;
-  case: (inv_addr_encoding k) => j H;
-  exists (j, (a'', 0));
-  by rewrite /state_encoding/= H
-].
-Qed.
-*)
-
 Lemma mm2Steps_equiv_lm2eSteps: forall s s' : lm2e_state,
   clos_refl_trans _ mm2_step (state_encoding s) (state_encoding s') <->
   clos_refl_trans _ lm2e_step s s'.
@@ -630,108 +614,23 @@ exact: (closRT_R_equiv_R' _ _ mm2_step lm2e_step state_encoding
   mm2Step_preserves_encoding_right).
 Qed.
 
-End LM2EReductionNe0.
-End LM2EReductionNe0.
-
-Module LM2EReductionEq0.
-Section LM2EReductionEq0.
-
-Variable P: MM2_PROBLEM.
-Let M := P.1.1.
-Let initial_a := P.1.2.
-Let initial_b := P.2.
-
-Definition M'_instructions: seq (lm2e_instr 0) := nil.
-
-Lemma M'_machine_length : size M'_instructions == 0.
-Proof. done. Qed.
-
-Definition M': lm2e_machine 0 := {|
-  einstructions := M'_instructions;
-  emachine_length := M'_machine_length;
-|}.
-
-Let lm2e_step := (lm2e_step M').
-Let mm2_step := (mm2_step M).
-
-Definition reduction_output : Lm2eHaltsArguments := {|
-  lm2e_halts_arguments_n := 0;
-  lm2e_halts_arguments_M := M';
-  lm2e_halts_arguments_x := initial_a;
-  lm2e_halts_arguments_y := initial_b;
-|}.
-
-Lemma mm2_empty_non_steps:
-  size M = 0 -> ~ clos_refl_trans _ mm2_step (1, (initial_a, initial_b)) (0, (0, 0)).
-Admitted.
-
-Lemma lm2e_empty_non_steps:
-  ~ clos_refl_trans _ lm2e_step (lm2e_initial_state 0 initial_a initial_b) (lm2e_ending_state 0).
-Admitted.
-
-End LM2EReductionEq0.
-End LM2EReductionEq0.
-
-Module LM2EReduction.
-Section LM2EReduction.
-
-Variable P: MM2_PROBLEM.
-Let M := P.1.1.
-Let initial_a := P.1.2.
-Let initial_b := P.2.
-
-Definition reduction_output : Lm2eHaltsArguments.
-Proof.
-case: (size M) => [|_].
-  exact: LM2EReductionEq0.reduction_output P.
-exact: LM2EReductionNe0.reduction_output P.
-Defined.
-
 End LM2EReduction.
 End LM2EReduction.
 
-Lemma LM2E_HALTS_reduction : MM2_HALTS_ON_ZERO ⪯ LM2E_HALTS_uncurried.
+Lemma LM2E_HALTS_reduction : MM2_NON_NULL_HALTS_ON_ZERO ⪯ LM2E_HALTS_uncurried.
 Proof.
-exists LM2EReduction.reduction_output => [[[M x] y]].
+exists (fun args => LM2EReduction.reduction_output (mm2nnhoz_ne0 args)) => [[[[M x] y]] /= ne0].
 split.
 - rewrite /LM2EReduction.reduction_output/=.
-  set n' := size M.
-  have: size M = n' by done.
-  case: n' => [H H'|n' H].
-    have := @LM2EReductionEq0.mm2_empty_non_steps (M, x, y) H H'.
-    done.
   rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
-  rewrite -LM2EReductionNe0.mm2Steps_equiv_lm2eSteps /=; last first.
-    by rewrite /LM2EReductionNe0.n/=; lia.
-  have -> //: LM2EReductionNe0.state_encoding (lm2e_initial_state (LM2EReductionNe0.n (M, x, y)) x y) = (1, (x, y)).
-  have {}H: n'.+1 = size M by rewrite H.
-  have -> //: lm2e_initial_state (size M) x y = (lm2e_addr_instr (cast_ord H ord0), (x, y)).
-  destruct H.
-  rewrite cast_ord_id /=.
-  have -> //: @Ordinal (S n') O erefl = ord0.
-  by apply /eqP.
+  by rewrite -LM2EReduction.mm2Steps_equiv_lm2eSteps.
 - rewrite /LM2EReduction.reduction_output/=.
-  set n' := size M.
-  have: size M = n' by done.
-  case: n' => [H|n' H].
-    rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
-    have := @LM2EReductionEq0.lm2e_empty_non_steps (M, x, y).
-    done.
   rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
-  rewrite -LM2EReductionNe0.mm2Steps_equiv_lm2eSteps /=; last first.
-    by rewrite /LM2EReductionNe0.n/=; lia.
-  have -> //: LM2EReductionNe0.state_encoding (lm2e_initial_state (LM2EReductionNe0.n (M, x, y)) x y) = (1, (x, y)).
-  rewrite /LM2EReductionNe0.n/=.
-  have {}H: n'.+1 = size M by rewrite H.
-  have -> //: lm2e_initial_state (size M) x y = (lm2e_addr_instr (cast_ord H ord0), (x, y)).
-  destruct H.
-  rewrite cast_ord_id /=.
-  have -> //: @Ordinal (S n') O erefl = ord0.
-  by apply /eqP.
+  by rewrite -LM2EReduction.mm2Steps_equiv_lm2eSteps.
 Qed.
 
 Lemma LM2E_HALTS_undec : undecidable LM2E_HALTS_uncurried.
-apply: (undecidability_from_reducibility MM2_HALTS_ON_ZERO_undec).
+apply: (undecidability_from_reducibility MM2_NON_NULL_HALTS_ON_ZERO_undec).
 exact: LM2E_HALTS_reduction.
 Qed.
 
@@ -953,12 +852,8 @@ case: i' => [/= _|i' /= _|i']; last by rewrite eq_refl.
   case: (nth (lm2e_dummy_instr n) M i) => /=.
   - by elim=> //=.
   - by elim=> //=.
-  - case: x => [|x _].
-      by elim=> //=.
-    by elim=> //=.
-  - case: y => [|y _].
-      by elim=> //=.
-    by elim=> //=.
+  - by case: x => [|x _]; elim=> //=.
+  - by case: y => [|y _]; elim=> //=.
 - rewrite nth_cat size_map (eqP (emachine_length M)) (ltn_ord i).
   rewrite (nth_map (lm2e_dummy_instr _)); last first.
     by rewrite (eqP (emachine_length M)) (ltn_ord i).
@@ -1127,15 +1022,6 @@ Definition reduction_output: Lm2HaltsArguments := {|
 End LM2Reduction.
 End LM2Reduction.
 
-Lemma cool x:
-  LM2Reduction.state_encoding (lm2e_initial_state (lm2e_halts_arguments_n x) (lm2e_halts_arguments_x x) (lm2e_halts_arguments_y x))
-   =  
-  lm2_initial_state (LM2Reduction.n_encoded_pos x) (lm2e_halts_arguments_x x) (lm2e_halts_arguments_y x).
-Proof.
-rewrite /lm2e_initial_state.
-(* faux !! *)
-Admitted.
-
 Lemma LM2_HALTS_reduction : LM2E_HALTS_uncurried ⪯ LM2_HALTS_uncurried.
 Proof.
 exists LM2Reduction.reduction_output => [x]; split.
@@ -1143,15 +1029,16 @@ exists LM2Reduction.reduction_output => [x]; split.
   rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
   move=> H.
   have /= := @LM2Reduction.lm2eSteps_to_lm2Steps x (lm2e_initial_state _ _ _) (lm2e_ending_state _) H.
-  rewrite /lm2_ending_state/=.
-  by rewrite cool.
+  have -> //: widen_ord (LM2Reduction.n_encoded_wider x) (Ordinal (lm2e_halts_arguments_ne0 x)) = Ordinal (LM2Reduction.n_encoded_pos x).
+  by apply /eqP.
+  rewrite /LM2Reduction.n_encoded_wider/=.
 - rewrite /LM2_HALTS_uncurried /LM2_HALTS /=.
   rewrite /LM2E_HALTS_uncurried /LM2E_HALTS /=.
   move=> H.
-  have := @LM2Reduction.lm2Steps_to_lm2eSteps x (lm2e_initial_state _ _ _) (lm2e_ending_state _) isT.
-  apply.
-  move: H.
-  by rewrite cool.
+  apply: (@LM2Reduction.lm2Steps_to_lm2eSteps x (lm2e_initial_state _ _ _) (lm2e_ending_state _) isT).
+  rewrite /lm2e_initial_state/=.
+  have -> //: widen_ord (LM2Reduction.n_encoded_wider x) (Ordinal (lm2e_halts_arguments_ne0 x)) = Ordinal (LM2Reduction.n_encoded_pos x).
+  by apply /eqP.
 Qed.
 
 Lemma LM2_HALTS_undec : undecidable LM2_HALTS_uncurried.
