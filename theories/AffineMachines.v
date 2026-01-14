@@ -129,6 +129,14 @@ Notation affineStep := (affineStep A).
 
 Notation affineStepEncoding s s' := (affineStep (state_encoding s) (state_encoding s')).
 
+Lemma power2_mod_3 x: (2 ^+ x %% 3)%Z = 1 \/ (2 ^+ x %% 3)%Z = 2.
+Proof.
+elim: x => [|x].
+  rewrite expr0 modz_small; last lia.
+  by left.
+rewrite exprS -modzMmr; case=> ->; do [by right|by left].
+Qed.
+
 Lemma lm2Step_to_affineStep : forall s s',
   (lm2_step s s') -> (affineStepEncoding s s').
 Proof.
@@ -195,8 +203,8 @@ elim: instr => [
 - (* dec_y *)
   case: y => [/andP [[/andP [/eqP -> /eqP ->]] /eqP ->]|l /andP [[/andP [/eqP -> /eqP ->]] /eqP ->]].
   - have []: ((2 ^+ x * 3 ^+ 0) %% 3)%Z = 1 \/ ((2 ^+ x * 3 ^+ 0) %% 3)%Z = 2.
-      have: ((2 ^+ x * 3 ^+ 0) %% 3)%Z < 3 by apply: ltz_pmod.
-      admit.
+      rewrite expr0 mulr1.
+      exact: power2_mod_3.
     - move=> remainder.
       exists (((address_encoding (lm2_addr_instr pos))%:Z + m, m3_as_nzint), ((address_encoding j)%:Z + m, m3_as_nzint)).
       split.
@@ -229,7 +237,7 @@ elim: instr => [
       by rewrite mem_enum.
     exists (2 ^+ x * 3 ^+ l) => /=.
     rewrite exprS; lia.
-Admitted.
+Qed.
 
 Lemma simplify_modulo : forall (a b c d K: int),
     (0 <= a <= K - 1)%R ->
@@ -291,6 +299,13 @@ have ->: logn 3 2 = 0 by done.
 lia.
 Qed.
 Arguments powers_injective {_ _ _ _} _.
+
+Lemma power3_mod2 x: ((3 ^+ x) %% 2)%Z = 1.
+Proof.
+elim: x => [|x]; first by rewrite expr0.
+rewrite exprS -modzMm => ->.
+by rewrite mulr1.
+Qed.
 
 Lemma affineStep_to_lm2Step : forall s s',
   (affineStepEncoding s s') -> (lm2_step s s').
@@ -394,7 +409,12 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     have x_eq_0: x = 0.
-      admit.
+      case: x {s_eq} H => // x H.
+      have: 2 ^+ x.+1 * 3 ^+ y = 1 + 2 * k %[mod 2] by rewrite H.
+      rewrite -modzDm modzMr addr0 exprS.
+      rewrite -mulrA modzMr.
+      have ->: ((1 %% 2)%Z %% 2)%Z = 1 by done.
+      lia.
     move: H s'_eq => <- s'_eq.
     have: (2 ^+ x' * 3 ^+ y') = ((2 ^+ x * 3 ^+ y) : int).
       apply /(simplify_quotient (address_encoding i') (address_encoding j) m).
@@ -433,7 +453,11 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     move: s'_eq s_eq H.
-    case: x; first admit; move=> x.
+    case: x => [_ _|x].
+      rewrite expr0 mul1r => H.
+      have {H}: 3 ^+ y = 2 * k %[mod 2] by rewrite H.
+      rewrite modzMr power3_mod2.
+      lia.
     move=> s'_eq s_eq H.
     have {H}: (2^+x * 3^+y) = k.
       apply /(simplify_quotient (address_encoding i) pos.+1 (m * 2)).
@@ -479,7 +503,13 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     have y_eq_0: y = 0.
-      admit.
+      case: y {s_eq} H => // y H.
+      have: 2 ^+ x * 3 ^+ y.+1 = 1 + 3 * k %[mod 3] by rewrite H.
+      rewrite -modzDm modzMr addr0 exprS.
+      rewrite -modzMm -[((3 * 3 ^+ _) %% 3)%Z]modzMm.
+      rewrite modzz mul0r mod0z mulr0 mod0z.
+      have <-: 1 = ((1 %% 3)%Z %% 3)%Z by done.
+      lia.
     move: H s'_eq => <- s'_eq.
     have: (2 ^+ x' * 3 ^+ y') = ((2 ^+ x * 3 ^+ y) : int).
       apply /(simplify_quotient (address_encoding i') (address_encoding j) m).
@@ -519,7 +549,13 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
       by rewrite (eqP machine_length); have := ltn_ord pos; lia.
       exact: s_eq.
     have y_eq_0: y = 0.
-      admit.
+      case: y {s_eq} H => // y H.
+      have: 2 ^+ x * 3 ^+ y.+1 = 2 + 3 * k %[mod 3] by rewrite H.
+      rewrite -modzDm modzMr addr0 exprS.
+      rewrite -modzMm -[((3 * 3 ^+ _) %% 3)%Z]modzMm.
+      rewrite modzz mul0r mod0z mulr0 mod0z.
+      have <-: 2 = ((2 %% 3)%Z %% 3)%Z by done.
+      lia.
     move: H s'_eq => <- s'_eq.
     have: (2 ^+ x' * 3 ^+ y') = ((2 ^+ x * 3 ^+ y) : int).
       apply /(simplify_quotient (address_encoding i') (address_encoding j) m).
@@ -558,7 +594,11 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
     by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: s_eq.
   move: s'_eq s_eq H.
-  case: y; first admit; move=> y.
+  case: y => [_ _|y].
+    rewrite expr0 mulr1 => H.
+    have {H}: 2 ^+ x = 3 * k %[mod 3] by rewrite H.
+    rewrite modzMr.
+    have [->|->] := power2_mod_3 x; lia.
   move=> s'_eq s_eq H.
   have {H}: (2^+x * 3^+y) = k.
     apply /(simplify_quotient (address_encoding i) pos.+1 (m * 3)).
@@ -586,7 +626,7 @@ elim: instr => [j instr_at_pos|j instr_at_pos|j l instr_at_pos|j l instr_at_pos]
   rewrite eqSS.
   move=> /eqP /ord_inj -> {pos'}.
   by rewrite /lm2_step /= -instr_at_pos !eq_refl.
-Admitted.
+Qed.
 
 Lemma affineStep_equiv_lm2Step : forall s s',
   (affineStepEncoding s s') <-> (lm2_step s s').
@@ -667,7 +707,11 @@ elim: instr => [j|j|j l|j l].
     exact: address_encoding_bound.
     by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: eq.
-  case: x; first admit; move=> x.
+  case: x => [|x].
+    rewrite expr0 mul1r => H.
+    have {H}: 3 ^+ y = 2 * k %[mod 2] by rewrite H.
+    rewrite modzMr power3_mod2.
+    lia.
   rewrite exprS => eq.
   (have {eq} <-: 2 ^+ x * 3 ^+ y = k by lia) => [H].
   exists (l, (x, y)) => /=.
@@ -703,12 +747,16 @@ elim: instr => [j|j|j l|j l].
     exact: address_encoding_bound.
     by rewrite (eqP machine_length); have := ltn_ord pos; lia.
     exact: eq.
-  case: y; first admit; move=> y.
+  case: y => [|y].
+    rewrite expr0 mulr1 => H.
+    have {H}: 2 ^+ x = 3 * k %[mod 3] by rewrite H.
+    rewrite modzMr.
+    have [->|->] := power2_mod_3 x; lia.
   rewrite exprS => eq.
   have {eq} <-: 2 ^+ x * 3 ^+ y = k; first lia; move=> /eqP ->.
   exists (l, (x, y)) => /=.
   lia.
-Admitted.
+Qed.
 
 Lemma affineStep_preserves_encoding_rev : forall y s,
   affineStep y (state_encoding s) -> exists s', state_encoding s' = y.
@@ -727,7 +775,11 @@ elim: instr => [j|j|j l|j l].
     exact: address_encoding_bound.
     exact: address_encoding_bound.
     exact: eq.
-  case: x eq H; first admit; move=> x eq H.
+  case: x eq H => [_|x eq H].
+    rewrite expr0 mul1r => H.
+    have {H}: 3 ^+ y = 2 * k %[mod 2] by rewrite H.
+    rewrite modzMr power3_mod2.
+    lia.
   exists (lm2_addr_instr pos, (x, y)) => /=.
   move: H; rewrite exprS => H.
   have {H} <-: 2 ^+ x * 3 ^+ y = k by lia.
@@ -741,7 +793,11 @@ elim: instr => [j|j|j l|j l].
     exact: address_encoding_bound.
     exact: address_encoding_bound.
     exact: eq.
-  case: y eq H; first admit; move=> y eq H.
+  case: y eq H => [_|y eq H].
+    rewrite expr0 mulr1 => H.
+    have {H}: 2 ^+ x = 3 * k %[mod 3] by rewrite H.
+    rewrite modzMr.
+    have [->|->] := power2_mod_3 x; lia.
   exists (lm2_addr_instr pos, (x, y)) => /=.
   move: H; rewrite exprS => H.
   have {H} <-: 2 ^+ x * 3 ^+ y = k by lia.
@@ -801,7 +857,7 @@ elim: instr => [j|j|j l|j l].
     exact: eq.
   exists (lm2_addr_instr pos, (x, y.+1)) => /=.
   rewrite exprS; lia.
-Admitted.
+Qed.
 
 Lemma affineSteps_equiv_lm2Steps : forall s s',
   (clos_refl_sym_trans _ affineStep (state_encoding s) (state_encoding s'))
