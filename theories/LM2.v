@@ -43,89 +43,107 @@ exists l1; exists (l2 ++ [:: mm2_inc_a]).
 rewrite H1 -catA; split=> //.
 Qed.
 
+Lemma steps_forward x y:
+  clos_refl_trans _ (mm2_step M) x y
+    ->
+  clos_refl_trans _ (mm2_step M') x y.
+Proof.
+move=> H; dependent induction H.
+- exact /rt_step /step_forward.
+- exact: rt_refl.
+- exact: (rt_trans _ _ _ y).
+Qed.
+
 Lemma sizeE {T: Type} (l: seq T): size l = length l.
 Proof. elim: l => //. Qed.
+
+Lemma step_back_propagates_property x y:
+  MM2Notations.index y <= size M ->
+  (mm2_step M') x y ->
+  MM2Notations.index x <= size M.
+Proof.
+move=> H; case=> instr [/[swap] step].
+move=> /[dup] /mm2_instr_at_bounds [].
+rewrite -sizeE /M' size_cat /= => _ H1.
+have /orP [/eqP H'|H'] := orbN (MM2Notations.index x == size M + 1); last lia.
+rewrite {1}H'.
+case=> l1; case=> l2 [] H2.
+rewrite -sizeE -addnE => H3.
+have {}H3: size l1 = size M by lia.
+have H4: size M + 1 = size l1 + size l2 + 1.
+  transitivity (size (M ++ [:: mm2_inc_a])).
+    by rewrite size_cat.
+  by rewrite H2 size_cat /=; lia.
+have /size0nil H5: size l2 = 0 by lia.
+move: H2; rewrite H5 => {}H5.
+have: rcons M mm2_inc_a = rcons l1 instr.
+  by rewrite -!cats1 H5.
+move=> /rcons_inj [_ Hinstr].
+move: step; rewrite -Hinstr => {}H5.
+dependent induction H5.
+have: i <= size M + 1; first by move: H1 => /=; lia.
+move: H => /=.
+lia.
+Qed.
+
+Lemma steps_back_propagate_property x y:
+  MM2Notations.index y <= size M ->
+  clos_refl_trans _ (mm2_step M') x y ->
+  MM2Notations.index x <= size M.
+Proof.
+move=> /[swap] /clos_rt_rtn1_iff H; dependent induction H => //.
+by move=> H'; have := step_back_propagates_property H' H.
+Qed.
 
 Lemma step_backward x y:
   MM2Notations.index y <= size M ->
   (mm2_step M') x y -> (mm2_step M) x y.
 Proof.
-(*
-move=> Hy.
-rewrite /mm2_step; case=> instr [instr_at instr_step].
-have /orP [H|H1] := orbN (MM2Notations.index x <= size M).
-  exists instr; split=> //.
-  move: instr_at; case=> l1 [l2] [] H'.
-  have H1: size M' = size l1 + size l2 + 1.
-    by rewrite H' size_cat /=; lia.
-  have H2: size M' = size M + 1.
-    by rewrite /M' size_cat.
-  have {H1 H2}H1: size M = size l1 + size l2 by lia.
-  move: H => /[swap] <-.
-  rewrite H1 -sizeE -addnE => H.
-  have {}H: size l2 > 0 by lia.
-  exists l1.
-  exists (take (size l2 - 1) l2); split=> //.
-  move: H'.
-  rewrite /M' -{1}(cat_take_drop (size l2 - 1) l2) => H'.
-  admit.
-move: (instr_at) => /mm2_instr_at_bounds [_].
-rewrite -sizeE /M' size_cat /= => H2.
-have {H1 H2}Hindex: MM2Notations.index x = size M + 1 by lia.
-move: instr_at (Hindex) => /[swap] -> [l1 [l2 [H1 H2]]].
-have: size M' = (size l1) + 1 + (size l2).
-  by rewrite H1 size_cat /=; lia.
-rewrite /M' size_cat /= -H2 -addnE -sizeE => H.
-have {H} /size0nil H: size l2 = 0 by lia.
-have {H H1}: M' = rcons l1 instr.
-  by rewrite H1 H -cats1.
-rewrite /M' cats1.
-move=> /rcons_inj; case=> _ H.
-move: instr_step; rewrite -{H2}H.
-move=> H'; dependent induction H'.
-Print mm2_atom.
-*)
-(*
-have
-have H3: size M' = (size M).+1.
-  by rewrite /M' size_cat /=; lia.
-have {}H1: size M' = (size l1) + (size l2) + 1.
-  by rewrite H1 size_cat /=; lia.
-have {H1 H3} H3: size M = size l1 + size l2 by lia.
-rewrite H3.
-have {}H2: MM2Notations.index x = size l1 + 1 by rewrite -H2 -addnE sizeE addnC.
-move=> H1.
-have {}H1: MM2Notations.index x > size l1 + size l2 by lia.
-have: MM2Notations.index x = size M.
-move: H1; rewrite {}H2.
-rewrite H3.
-
-rewrite -H2.
-
-rewrite /M'.
-
-rewrite -H2 H1 size_cat /=.
-rewrite sizeE.
-have: size l2 = 0.
-have: size M = MM2Notations.index x.
-  mo
-
-move: H2 H1.
-
+move=> Hy H.
+have Hx := step_back_propagates_property Hy H.
+move: H; case=> instr [instr_at instr_step].
 exists instr; split=> //.
-rewrite /M'.
-exists l1; exists (l2 ++ [:: mm2_inc_a]).
-rewrite H1 -catA; split=> //.
-*)
-Admitted.
+move: instr_at; case=> l1 [l2] [] H' H''.
+have: size l2 > 0.
+  have: size M' = size l1 + size l2 + 1.
+    by rewrite H' size_cat /=; lia.
+  rewrite /M' size_cat /= => H.
+  have {}H: size M = size l1 + size l2 by lia.
+  move: Hx.
+  rewrite -H'' -sizeE -addnE.
+  lia.
+case/lastP: l2 H' => [/=|l2 instr' H' _]; first lia.
+have/rcons_inj [H _]: rcons M mm2_inc_a = rcons (l1 ++ instr::l2) instr'.
+  rewrite -!cats1.
+  move: H'; rewrite /M' => ->.
+  by rewrite -cats1 -catA.
+exists l1; exists l2; split=> //.
+Qed.
+
+Lemma steps_backward x y:
+  MM2Notations.index y <= size M ->
+  clos_refl_trans _ (mm2_step M') x y ->
+  clos_refl_trans _ (mm2_step M) x y.
+Proof.
+move=> H H'; dependent induction H'.
+- exact /rt_step /step_backward.
+- exact: rt_refl.
+- apply: (rt_trans _ _ _ y); last by exact: IHH'2.
+  exact /IHH'1 /(steps_back_propagate_property H).
+Qed.
 
 End MM2NNReduction.
 End MM2NNReduction.
 
 Lemma MM2_NON_NULL_HALTS_ON_ZERO_reduction: MM2_HALTS_ON_ZERO ⪯ MM2_NON_NULL_HALTS_ON_ZERO.
 Proof.
-exists MM2NNReduction.reduction_output => [P]; split.
-Admitted.
+exists MM2NNReduction.reduction_output => [[[M x] y]]; split.
+- rewrite /MM2_NON_NULL_HALTS_ON_ZERO /MM2_HALTS_ON_ZERO/= => H.
+  exact: (@MM2NNReduction.steps_forward (M, x, y)).
+- rewrite /MM2_NON_NULL_HALTS_ON_ZERO /MM2_HALTS_ON_ZERO/= => H.
+  apply /(MM2NNReduction.steps_backward _ H) => /=.
+  lia.
+Qed.
 
 Lemma MM2_NON_NULL_HALTS_ON_ZERO_undec: undecidable MM2_NON_NULL_HALTS_ON_ZERO.
 Proof.
