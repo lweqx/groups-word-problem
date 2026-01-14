@@ -918,9 +918,12 @@ move=> [n M ne0 x y]; split.
   rewrite /equivalence_problem_uncurried /reduction_output /equivalence_problem /=.
   (* I can't get the ending state encoding not to simplify -_- *)
   have ->: (0%Z + (size M).+1 * 2 ^+ 0 * 3 ^+ 0) = (state_encoding M (ending_state n)) by done.
-  apply /affineSteps_equiv_lm2Steps => //.
-  apply /lm2Steps_to_stop_is_reversible.
-  exact: H.
+  have ->: (1%Z + (size M).+1%:Z * 2 ^+ x * 3 ^+ y) = (state_encoding M (initial_state ne0 x y)) by done.
+  have -> := affineSteps_equiv_lm2Steps ne0 M (initial_state ne0 x y) (ending_state n).
+  move: H.
+  rewrite /LM2_HALTS_uncurried/LM2_HALTS/=.
+  rewrite lm2Steps_to_stop_is_reversible /=.
+  done.
 - rewrite /equivalence_problem_uncurried /reduction_output.
   move=> H.
   rewrite /LM2_HALTS_uncurried /LM2_HALTS /=.
