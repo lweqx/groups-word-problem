@@ -17,6 +17,9 @@ Record MM2_NON_NULL_HALTS_ON_ZERO_arguments := {
 Definition MM2_NON_NULL_HALTS_ON_ZERO := fun (args: MM2_NON_NULL_HALTS_ON_ZERO_arguments) =>
   MM2_HALTS_ON_ZERO (mm2nnhoz_problem args).
 
+Lemma sizeE {T: Type} (l: seq T): size l = length l.
+Proof. elim: l => //. Qed.
+
 Module MM2NNReduction.
 Section MM2NNReduction.
 
@@ -53,9 +56,6 @@ move=> H; dependent induction H.
 - exact: rt_refl.
 - exact: (rt_trans _ _ _ y).
 Qed.
-
-Lemma sizeE {T: Type} (l: seq T): size l = length l.
-Proof. elim: l => //. Qed.
 
 Lemma step_back_propagates_property x y:
   MM2Notations.index y <= size M ->
