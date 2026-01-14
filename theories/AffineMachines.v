@@ -1,7 +1,7 @@
 From HB Require Import structures.
 From Undecidability.Synthetic Require Import Undecidability.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
-From mathcomp Require Import seq.
+From mathcomp Require Import seq eqtype.
 From mathcomp Require Import all_algebra eqtype fintype ssrnat intdiv prime.
 From mathcomp Require Import ring lra zify.
 From Stdlib.Relations Require Import Relation_Operators Operators_Properties.
@@ -13,9 +13,29 @@ Import GRing.Theory.
 Open Scope int_scope.
 Open Scope ring_scope.
 
-(* `(p, q): State` represents the set of all `p + qZ` *)
-(* TODO: should be int * non-zero int but it's a pain, let's see where this gets us. *)
-Definition State := (int * int) % type.
+Record nzint := {
+  nzint_val :> int;
+  nzint_non_nul: nzint_val != 0;
+}.
+
+Definition nzint_eq_op (x y: nzint) := (x == y :> int).
+Lemma nzint_eqP x y: reflect (x = y) (nzint_eq_op x y).
+Proof.
+apply /(iffP idP) => [|->].
+- rewrite /nzint_eq_op.
+  case: x => [x x_non_null] /=.
+  case: y => [y y_non_null] /=.
+  move=> /eqP H.
+  move: x_non_null.
+  move: y_non_null.
+  rewrite H => eq1 eq2.
+  by rewrite (bool_irrelevance eq1 eq2).
+- by rewrite /nzint_eq_op eq_refl.
+Qed.
+
+HB.instance Definition _ := hasDecEq.Build nzint nzint_eqP.
+
+Definition State := (int * nzint) % type.
 Definition Transition := (State * State) % type.
 Definition Machine := seq Transition.
 
@@ -28,7 +48,7 @@ Definition isTransitionOf (t: Transition) := t \in A.
 Definition transitionStep (t: Transition) a b :=
   (isTransitionOf t) /\ (
     let '((p, q), (p', q')) := t in
-    exists (z: int), (a == p + q*z) && (b == p' + q'*z)
+    exists (z: int), (a == p + (q: int)*z) && (b == p' + (q': int)*z)
   ).
 
 Definition affineStep a b := exists (t: Transition), transitionStep t a b.
@@ -66,27 +86,34 @@ Definition address_encoding (addr: lm2_addr) : nat := match addr with
 Definition state_encoding (s: lm2_state) : int := let '(i, (x, y)) := s in
   (address_encoding i)%:Z + m * (2 ^+ x) * (3 ^+ y).
 
+Definition m_as_nzint: nzint.
+Proof. exists m; lia. Defined.
+Definition m2_as_nzint: nzint.
+Proof. exists (2 * m); lia. Defined.
+Definition m3_as_nzint: nzint.
+Proof. exists (3 * m); lia. Defined.
+
 (* encodes the instruction `instr` at address `i` *)
 Definition instruction_encoding (instr: lm2_instr) (i: 'I_n) : list Transition :=
   let i: int := address_encoding (lm2_addr_instr i) in
   match instr with
-  | lm2_inc_x j => [:: ((i, m), ((address_encoding j)%:Z, 2 * m))]
-  | lm2_inc_y j => [:: ((i, m), ((address_encoding j)%:Z, 3 * m))]
+  | lm2_inc_x j => [:: ((i, m_as_nzint), ((address_encoding j)%:Z, m2_as_nzint))]
+  | lm2_inc_y j => [:: ((i, m_as_nzint), ((address_encoding j)%:Z, m3_as_nzint))]
   | lm2_dec_x j k => let j := (address_encoding j)%:Z in let k := (address_encoding k)%:Z in [::
       (* i + m(2z + 1) -> k + m(2z + 1) : x is zero, continue to j *)
-      ((i + m, 2 * m), (j + m, 2 * m));
+      ((i + m, m2_as_nzint), (j + m, m2_as_nzint));
 
       (* i + 2mz -> k + mz : x is not-zero, decrement and jump to k *)
-      ((i, 2 * m), (k, m))
+      ((i, m2_as_nzint), (k, m_as_nzint))
     ]
   | lm2_dec_y j k => let j := (address_encoding j)%:Z in let k := (address_encoding k)%:Z in [::
       (* i + m(3z + 1) -> j + m(3z + 1) : y is zero, continue to j *)
-      ((i + m, 3 * m), (j + m, 3 * m));
+      ((i + m, m3_as_nzint), (j + m, m3_as_nzint));
       (* i + m(3z + 2) -> j + m(3z + 2) : y is zero, continue to j *)
-      ((i + 2 * m, 3 * m), (j + 2 * m, 3 * m));
+      ((i + 2 * m, m3_as_nzint), (j + 2 * m, m3_as_nzint));
 
       (* i + 3mz -> k + mz : y is not-zero, decrement and jump to k *)
-      ((i, 3 * m), (k, m))
+      ((i, m3_as_nzint), (k, m_as_nzint))
     ]
   end.
 
@@ -117,7 +144,7 @@ elim: instr => [
   j k instr_at_pos
 ].
 - (* inc_x *)
-  exists (((address_encoding (lm2_addr_instr pos))%:Z, m), ((address_encoding j)%:Z, 2 * m)).
+  exists (((address_encoding (lm2_addr_instr pos))%:Z, m_as_nzint), ((address_encoding j)%:Z, m2_as_nzint)).
   split.
     apply /flattenP.
     exists (instruction_encoding (lm2_inc_x j) pos); last first.
@@ -126,9 +153,9 @@ elim: instr => [
     apply /mapP; exists pos => //.
     by rewrite mem_enum.
   exists (2^+x * 3^+y) => /=.
-  by rewrite exprS; lia.
+  by rewrite exprS /=; lia.
 - (* inc_y *)
-  exists (((address_encoding (lm2_addr_instr pos))%:Z, m), ((address_encoding j)%:Z, 3 * m)).
+  exists (((address_encoding (lm2_addr_instr pos))%:Z, m_as_nzint), ((address_encoding j)%:Z, m3_as_nzint)).
   split.
     apply /flattenP.
     exists (instruction_encoding (lm2_inc_y j) pos); last first.
@@ -140,7 +167,7 @@ elim: instr => [
   by rewrite exprS; lia.
 - (* dec_x *)
   case: x => [/andP [[/andP [/eqP -> /eqP ->]] /eqP ->]|l /andP [[/andP [/eqP -> /eqP ->]] /eqP ->]].
-  - exists (((address_encoding (lm2_addr_instr pos))%:Z + m, 2 * m), ((address_encoding j)%:Z + m, 2 * m)).
+  - exists (((address_encoding (lm2_addr_instr pos))%:Z + m, m2_as_nzint), ((address_encoding j)%:Z + m, m2_as_nzint)).
     split.
       apply /flattenP.
       exists (instruction_encoding (lm2_dec_x j k) pos); last first.
@@ -155,7 +182,7 @@ elim: instr => [
     exists ((2^+0 * 3^+y) %/ 2)%Z => /=.
     rewrite -mulrA {1}(divz_eq (2^+0 * 3^+y) 2) remainder_1 /=.
     lia.
-  - exists (((address_encoding (lm2_addr_instr pos))%:Z, 2 * m), ((address_encoding k)%:Z, m)).
+  - exists (((address_encoding (lm2_addr_instr pos))%:Z, m2_as_nzint), ((address_encoding k)%:Z, m_as_nzint)).
     split.
       apply /flattenP.
       exists (instruction_encoding (lm2_dec_x j k) pos); last first.
@@ -171,7 +198,7 @@ elim: instr => [
       have: ((2 ^+ x * 3 ^+ 0) %% 3)%Z < 3 by apply: ltz_pmod.
       admit.
     - move=> remainder.
-      exists (((address_encoding (lm2_addr_instr pos))%:Z + m, 3 * m), ((address_encoding j)%:Z + m, 3 * m)).
+      exists (((address_encoding (lm2_addr_instr pos))%:Z + m, m3_as_nzint), ((address_encoding j)%:Z + m, m3_as_nzint)).
       split.
         apply /flattenP.
         exists (instruction_encoding (lm2_dec_y j k) pos); last first.
@@ -182,7 +209,7 @@ elim: instr => [
       exists ((2 ^+ x * 3 ^+ 0) %/ 3)%Z => /=.
       rewrite -mulrA {1}(divz_eq (2^+x * 3^+0) 3) remainder; lia.
     - move=> remainder.
-      exists (((address_encoding (lm2_addr_instr pos))%:Z + 2 * m, 3 * m), ((address_encoding j)%:Z + 2 * m, 3 * m)).
+      exists (((address_encoding (lm2_addr_instr pos))%:Z + 2 * m, m3_as_nzint), ((address_encoding j)%:Z + 2 * m, m3_as_nzint)).
       split.
         apply /flattenP.
         exists (instruction_encoding (lm2_dec_y j k) pos); last first.
@@ -192,7 +219,7 @@ elim: instr => [
         by rewrite mem_enum.
       exists ((2 ^+ x * 3 ^+ 0) %/ 3)%Z => /=.
       rewrite -mulrA {1}(divz_eq (2^+x * 3^+0) 3) remainder; lia.
-  - exists (((address_encoding (lm2_addr_instr pos))%:Z, 3 * m), ((address_encoding k)%:Z, m)).
+  - exists (((address_encoding (lm2_addr_instr pos))%:Z, m3_as_nzint), ((address_encoding k)%:Z, m_as_nzint)).
     split.
       apply /flattenP.
       exists (instruction_encoding (lm2_dec_y j k) pos); last first.
@@ -620,7 +647,7 @@ elim: instr => [j|j|j l|j l].
   exists (j, (x, y.+1)) => /=.
   rewrite exprS; lia.
 - rewrite inE => /= /orP [/eqP [-> -> -> ->]|].
-    case=> k.
+    case=> k /=.
     rewrite [2 * _]mulrC -!mulrA -{2}[m]mulr1 -{4}[m]mulr1 -!addrA -!mulrDr.
     move=> /andP [] /eqP /= eq.
     have <-: (2^+x * 3^+y) = 1 + 2*k.
@@ -632,7 +659,7 @@ elim: instr => [j|j|j l|j l].
     exists (j, (x, y)) => /=.
     lia.
   rewrite inE => /= [/eqP [-> -> -> ->]].
-  case=> k.
+  case=> k /=.
   rewrite [2 * _]mulrC -!mulrA.
   move=> /andP [] /eqP /= eq.
   have {eq}: (2^+x * 3^+y) = 2*k.
@@ -646,7 +673,7 @@ elim: instr => [j|j|j l|j l].
   exists (l, (x, y)) => /=.
   lia.
 - rewrite inE => /= /orP [/eqP [-> -> -> ->]|].
-    case=> k.
+    case=> k /=.
     rewrite -mulrA -[3 * _]mulrC -mulrA -{2}[m]mulr1 -{4}[m]mulr1 -!addrA -!mulrDr.
     move=> /andP [] /eqP /= eq.
     have <-: (2^+x * 3^+y) = 1 + 3*k.
@@ -692,7 +719,7 @@ move=> /flattenP [] transitions /mapP [] pos _ ->.
 set instr := lm2_instr_at M pos.
 elim: instr => [j|j|j l|j l].
 - rewrite inE => /= [/eqP [-> -> -> ->]].
-  case=> k.
+  case=> k /=.
   rewrite -mulrA [2 * _]mulrC -[_ * 2 * _]mulrA.
   move=> /andP [] /eqP -> /eqP /= eq.
   have H: (2^+x * 3^+y) = 2 * k.
@@ -706,7 +733,7 @@ elim: instr => [j|j|j l|j l].
   have {H} <-: 2 ^+ x * 3 ^+ y = k by lia.
   lia.
 - rewrite inE => /= [/eqP [-> -> -> ->]].
-  case=> k.
+  case=> k /=.
   rewrite -mulrA [3 * _]mulrC -[_ * 3 * _]mulrA.
   move=> /andP [] /eqP -> /eqP /= eq.
   have H: (2^+x * 3^+y) = 3 * k.
@@ -731,7 +758,7 @@ elim: instr => [j|j|j l|j l].
     exists (lm2_addr_instr pos, (x, y)) => /=.
     lia.
   rewrite inE => /= /eqP [-> -> -> ->].
-  case=> k.
+  case=> k /=.
   rewrite [2 * _]mulrC -!mulrA.
   move=> /andP [] /eqP -> /eqP /= eq.
   have H: (2^+x * 3^+y) = k.
@@ -742,7 +769,7 @@ elim: instr => [j|j|j l|j l].
   exists (lm2_addr_instr pos, (x.+1, y)) => /=.
   rewrite exprS; lia.
 - rewrite inE => /= /orP [/eqP [-> -> -> ->]|].
-    case=> k.
+    case=> k /=.
     rewrite -![3 * _]mulrC -!mulrA -{1}[m]mulr1 -{4}[m]mulr1 -!addrA -!mulrDr.
     move=> /andP [] /eqP -> /eqP /= eq.
     have <-: (2^+x * 3^+y) = 1 + 3 * k.
@@ -753,7 +780,7 @@ elim: instr => [j|j|j l|j l].
     exists (lm2_addr_instr pos, (x, y)) => /=.
     lia.
   rewrite inE => /= /orP [/eqP [-> -> -> ->]|].
-    case=> k.
+    case=> k /=.
     rewrite -![3 * _]mulrC -!mulrA -![2 * _]mulrC -!addrA -!mulrDr.
     move=> /andP [] /eqP -> /eqP /= eq.
     have <-: (2^+x * 3^+y) = 2 + 3 * k.
@@ -764,7 +791,7 @@ elim: instr => [j|j|j l|j l].
     exists (lm2_addr_instr pos, (x, y)) => /=.
     lia.
   rewrite inE => /= /eqP [-> -> -> ->].
-  case=> k.
+  case=> k /=.
   rewrite [3 * _]mulrC -!mulrA.
   move=> /andP [] /eqP -> /eqP /= eq.
   have H: (2^+x * 3^+y) = k.
