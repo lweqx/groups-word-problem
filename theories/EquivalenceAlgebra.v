@@ -366,9 +366,6 @@ HB.instance Definition _ := isSubgroup.Build K selfsubgroup identity_morphism.
 
 End SelfSubgroup.
 
-Definition transport {A} {P: A -> Type} {x y: A} (e: x = y): P y -> P x.
-Proof. by elim: e. Qed.
-
 HB.mixin Record isSubgroupCharacterizer (G: group) (P: G -> Type) := {
   P_law: forall x y, P x -> P y -> P (x @ y);
   P_neutral: P e;
